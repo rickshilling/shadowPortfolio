@@ -19,6 +19,7 @@ def merge_lists(shadow:pd.DataFrame, mine:pd.DataFrame):
   my_amounts = []
   my_percentages = []
   my_quantities = []
+  my_total_prices_paid = []
   for shadow_index, shadow_element in shadow.iterrows():
     shadow_ticker_string = shadow_element['Ticker']
     shadow_ticker_string = shadow_ticker_string.replace("*","")
@@ -43,9 +44,12 @@ def merge_lists(shadow:pd.DataFrame, mine:pd.DataFrame):
       if my_element['Symbol'] == shadow_ticker_string:
         my_amount = my_element["Value $"]
         my_quantity = my_element["Quantity"]
+        my_price_paid = my_element["Price Paid $"]
+        my_total_price_paid = my_quantity*my_price_paid
         break
     my_amounts.append(my_amount)
     my_quantities.append(my_quantity)
+    my_total_prices_paid.append(my_total_price_paid)
   my_percentages = my_amounts / np.sum(my_amounts)
   my_percentages = list(np.round(my_percentages, decimals = 3))
 
@@ -56,6 +60,7 @@ def merge_lists(shadow:pd.DataFrame, mine:pd.DataFrame):
   my_amounts = np.array(my_amounts)
   my_percentages = np.array(my_percentages)
   my_quantities = np.array(my_quantities)
+  my_total_prices_paid = np.array(my_total_prices_paid)
 
   num_stocks = np.size(tickers)
   stock_indices = np.arange(num_stocks)
@@ -69,6 +74,7 @@ def merge_lists(shadow:pd.DataFrame, mine:pd.DataFrame):
   stock_list['my_percentages'] = my_percentages
   stock_list['num_stocks'] = num_stocks
   stock_list['my_quantities'] = my_quantities
+  stock_list['my_total_prices_paid'] = my_total_prices_paid
   return stock_list
 
 def get_weighting(stock_list=[],
@@ -95,6 +101,7 @@ def get_weighting(stock_list=[],
   my_amounts = stock_list['my_amounts'][indices]
   my_percentages = stock_list['my_percentages'][indices]
   my_quantities = stock_list['my_quantities'][indices]
+  my_total_prices_paid = stock_list['my_total_prices_paid'][indices]
 
   indices1 = []
   indices2 = []
@@ -128,6 +135,7 @@ def get_weighting(stock_list=[],
   my_amounts = my_amounts[indices]
   my_percentages = my_percentages[indices]
   my_quantities = my_quantities[indices]
+  my_total_prices_paid = my_total_prices_paid[indices]
 
   stock_list['tickers'] = tickers
   stock_list['stock_prices'] = stock_prices
@@ -137,6 +145,7 @@ def get_weighting(stock_list=[],
   stock_list['my_percentages'] = my_percentages
   stock_list['target_percentages'] = target_percentages
   stock_list['my_quantities'] = my_quantities
+  stock_list['my_total_prices_paid'] = my_total_prices_paid
   return stock_list
 
 def distribute(stock_list, contribution):
@@ -145,6 +154,12 @@ def distribute(stock_list, contribution):
   stock_list['target_amounts'] = target_amount * stock_list['target_percentages']
   stock_list['difference_amounts'] = stock_list['target_amounts'] - stock_list['my_amounts']
   pass
+
+def distribute_by_price_paid(stock_list, contribution):
+  total_price_paid = stock_list['my_total_prices_paid'].sum()
+  target_amount = total_price_paid + contribution
+  stock_list['target_amounts'] = target_amount * stock_list['target_percentages']
+  stock_list['difference_amounts'] = stock_list['target_amounts'] - stock_list['my_amounts']
 
 def polarize_by_difference(stock_list):
   stock_list['positive'] = dict()
@@ -228,6 +243,80 @@ def optimize_by_difference(stock_list, postive_contribution, negative_contributi
     target_amount = my_amount + postive_contribution 
     target_amounts = target_amount * stock_list['target_percentages']
     difference_amounts = target_amounts - my_amounts
+    indices_to_increase = np.nonzero(difference_amounts >= 0)
+    indices_to_decrease = np.nonzero(difference_amounts < 0)
+    my_amounts_to_increase = my_amounts[indices_to_increase]
+    my_amounts_to_decrease = my_amounts[indices_to_decrease]
+    my_amount_to_increase = my_amounts_to_increase.sum()
+    my_amount_to_decrease = my_amounts_to_decrease.sum()
+    target_amount_to_increase = my_amount_to_increase + postive_contribution
+    target_amount_to_decrease = my_amount_to_decrease - negative_contribution
+    target_percentages_to_increase = stock_list['target_percentages'][indices_to_increase] / stock_list['target_percentages'][indices_to_increase].sum()
+    target_percentages_to_decrease = stock_list['target_percentages'][indices_to_decrease] / stock_list['target_percentages'][indices_to_decrease].sum() 
+    target_amounts_to_increase = my_amounts_to_increase + postive_contribution * target_percentages_to_increase
+    target_amounts_to_decrease = my_amounts_to_decrease - negative_contribution * target_percentages_to_decrease
+    stock_list['optimized_amounts'] = np.zeros(stock_list['num_stocks'])
+    stock_list['optimized_quantities'] = np.zeros(stock_list['num_stocks'])
+    stock_list['optimized_delta_quantities'] = np.zeros(stock_list['num_stocks'])
+    stock_list['target_amounts'] = np.zeros(stock_list['num_stocks'])
+    stock_list['target_amounts'][indices_to_increase] = target_amounts_to_increase
+    stock_list['target_amounts'][indices_to_decrease] = target_amounts_to_decrease
+
+    num_stocks_to_increase = np.size(indices_to_increase)
+    num_states_to_increase = 2**num_stocks_to_increase
+    stock_prices_to_increase = stock_list['stock_prices'][indices_to_increase]
+    base_quantities_to_increase = np.int32(target_amounts_to_increase / stock_prices_to_increase)
+    states_to_increase = np.arange(num_states_to_increase)
+    delta_quantities_to_increase = np.zeros((num_states_to_increase,num_stocks_to_increase),dtype=np.int8)
+    for i in range(num_stocks_to_increase):
+        stock_index_to_increase = num_stocks_to_increase - 1 - i
+        delta_quantities_to_increase[:,stock_index_to_increase] = states_to_increase % 2
+        states_to_increase = states_to_increase >> 1
+    quantities_to_increase = base_quantities_to_increase + delta_quantities_to_increase
+    amounts_to_increase = np.multiply(quantities_to_increase, stock_prices_to_increase)
+    amount_to_increase = amounts_to_increase.sum(axis = 1)
+    differences = target_amounts_to_increase - amounts_to_increase
+    scores = np.multiply(differences,differences).sum(axis=1)
+    admissible_indices = np.where(amount_to_increase < target_amount_to_increase)
+    admissible_max_index = np.argmax(scores[admissible_indices])
+    max_index = admissible_indices[0][admissible_max_index]
+    stock_list['optimized_amounts'][indices_to_increase] = amounts_to_increase[max_index,:]
+    stock_list['optimized_quantities'][indices_to_increase] = quantities_to_increase[max_index,:]
+    stock_list['optimized_delta_quantities'][indices_to_increase] = stock_list['optimized_quantities'][indices_to_increase]- stock_list['my_quantities'][indices_to_increase]
+
+    num_stocks_to_decrease = np.size(indices_to_decrease)
+    num_states_to_decrease = 2**num_stocks_to_decrease
+    stock_prices_to_decrease = stock_list['stock_prices'][indices_to_decrease]
+    base_quantities_to_decrease = np.ceil(target_amounts_to_decrease / stock_prices_to_decrease)
+    states_to_decrease = np.arange(num_states_to_decrease)
+    delta_quantities_to_decrease = np.zeros((num_states_to_decrease,num_stocks_to_decrease),dtype=np.int8)
+    for i in range(num_stocks_to_decrease):
+        stock_index_to_decrease = num_stocks_to_decrease - 1 - i
+        delta_quantities_to_decrease[:,stock_index_to_decrease] = states_to_decrease % 2
+        states_to_decrease = states_to_decrease >> 1
+    quantities_to_decrease = base_quantities_to_decrease - delta_quantities_to_decrease
+    amounts_to_decrease = np.multiply(quantities_to_decrease, stock_prices_to_decrease)
+    amount_to_decrease = amounts_to_decrease.sum(axis = 1)
+    differences = target_amounts_to_decrease - amounts_to_decrease
+    scores = np.multiply(differences,differences).sum(axis=1)
+    admissible_indices = np.where(amount_to_decrease > target_amount_to_decrease)
+    admissible_max_index = np.argmax(scores[admissible_indices])
+    max_index = admissible_indices[0][admissible_max_index]
+    stock_list['optimized_amounts'][indices_to_decrease] = amounts_to_decrease[max_index,:]
+    stock_list['optimized_quantities'][indices_to_decrease] = quantities_to_decrease[max_index,:]
+    stock_list['optimized_delta_quantities'][indices_to_decrease] = stock_list['optimized_quantities'][indices_to_decrease]- stock_list['my_quantities'][indices_to_decrease]
+    return stock_list
+
+def optimize_by_price_paid_difference(stock_list, postive_contribution, negative_contribution):
+    my_amounts = stock_list['my_amounts']
+    my_amount = my_amounts.sum()
+    my_total_prices_paid = stock_list['my_total_prices_paid']
+    my_total_price_paid = my_total_prices_paid.sum()
+    # target_amount = my_amount + postive_contribution 
+    target_amount = my_total_price_paid + postive_contribution 
+    target_amounts = target_amount * stock_list['target_percentages']
+    # difference_amounts = target_amounts - my_amounts
+    difference_amounts = target_amounts - my_total_prices_paid
     indices_to_increase = np.nonzero(difference_amounts >= 0)
     indices_to_decrease = np.nonzero(difference_amounts < 0)
     my_amounts_to_increase = my_amounts[indices_to_increase]

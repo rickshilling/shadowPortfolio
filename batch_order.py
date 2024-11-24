@@ -6,6 +6,7 @@ will then get today's best quote for each ticker, print that on the terminal, ca
 approximate cost of the BUY LMT orders read from the CSV file, and also print that for user confirmation.
 If user confirms, the orders will be sent to the exchange. 
 
+touch
 '''
 import configparser, os, json
 import argparse

@@ -40,14 +40,14 @@ def merge_lists(shadow:pd.DataFrame, mine:pd.DataFrame):
 
     my_amount = 0
     my_quantity = 0
-    # if shadow_ticker_string == 'AVD':
-    #   pass
     for my_index, my_element in mine.iterrows():
       if my_element['Symbol'] == shadow_ticker_string:
         my_amount = my_element["Value $"]
         my_quantity = my_element["Quantity"]
         my_price_paid = my_element["Price Paid $"]
         break
+    if shadow_ticker_string=="LSEA":
+       pass
     my_total_price_paid = my_quantity*my_price_paid
     my_amounts.append(my_amount)
     my_quantities.append(my_quantity)

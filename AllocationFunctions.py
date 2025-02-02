@@ -46,8 +46,6 @@ def merge_lists(shadow:pd.DataFrame, mine:pd.DataFrame):
         my_quantity = my_element["Quantity"]
         my_price_paid = my_element["Price Paid $"]
         break
-    if shadow_ticker_string=="LSEA":
-       pass
     my_total_price_paid = my_quantity*my_price_paid
     my_amounts.append(my_amount)
     my_quantities.append(my_quantity)
@@ -312,3 +310,41 @@ def optimize_by_difference(stock_list, postive_contribution, negative_contributi
     stock_list['optimized_quantities'][indices_to_decrease] = quantities_to_decrease[max_index,:]
     stock_list['optimized_delta_quantities'][indices_to_decrease] = stock_list['optimized_quantities'][indices_to_decrease]- stock_list['my_quantities'][indices_to_decrease]
     return stock_list
+
+def udpate_transaction_history(transaction_history:pd.DataFrame, 
+                               stock_list,
+                               new_date,
+                               eps = 1e-6):
+  num_rows, num_cols = transaction_history.shape
+  num_dates = int(num_cols / 3)
+  num_new_dates = num_dates + 1
+  new_date_field_name = 'Date ' + str(num_new_dates)
+  new_price_field_name = 'Price paid $ ' + str(num_new_dates)
+  new_quantity_field_name = 'Quantity ' + str(num_new_dates)
+  new_dates = []
+  new_prices = []
+  new_quantities = []
+  new_transaction_history = transaction_history
+  # 3 possiblities:
+  #   In stock_list, in transaction_history
+  #   In stock_list, out transaction_history
+  #  Out stock_list, in  transaction_history
+  
+  for stock_index, stock_ticker_string in enumerate(stock_list['tickers']):
+    stock_in_transaction_history = False
+    for transaction_row_index, transaction_row in transaction_history.iterrows():
+       if stock_ticker_string == transaction_row['Ticker']:
+        # Compare quantities in stock_list and transaction_history
+        stock_in_transaction_history = True
+        old_quantity = np.sum(transaction_row[3::3])
+        new_quantity = stock_list['my_quantities'][stock_index]
+        added_quantity = new_quantity - old_quantity
+        if abs(added_quantity) > eps:
+          # Calculate average price paid on added quantity
+          
+          pass
+        break
+    if not stock_in_transaction_history: 
+      pass
+  return new_transaction_history
+  

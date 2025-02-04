@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import math
+import jax.numpy as jnp
 
 def make_line(y_first, y_last, num_xs):
   x_first = 0
@@ -336,12 +337,16 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
        if stock_ticker_string == transaction_row['Ticker']:
         # Compare quantities in stock_list and transaction_history
         stock_in_transaction_history = True
-        old_quantity = np.sum(transaction_row[3::3])
+        old_quantities = jnp.array(float(transaction_row[3::3]))
+        old_quantity = np.sum(old_quantities)
         new_quantity = stock_list['my_quantities'][stock_index]
         added_quantity = new_quantity - old_quantity
         if abs(added_quantity) > eps:
           # Calculate average price paid on added quantity
-          
+          new_total_price_paid = stock_list['my_total_prices_paid'][stock_index]
+          new_average_price_paid = new_total_price_paid/new_quantity
+          old_prices = jnp.array(float(transaction_row[2::3]))
+          old_total_price_paid = jnp.dot(old_quantities, old_prices)
           pass
         break
     if not stock_in_transaction_history: 

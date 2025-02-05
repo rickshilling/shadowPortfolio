@@ -348,9 +348,9 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
           price_paid_last_time = (new_total_price_paid - old_total_price_paid)/added_quantity_last_time
         else:
           price_paid_last_time = 0
-        
         break
-    if not stock_in_transaction_history: 
-      pass
+    if not stock_in_transaction_history:
+      added_quantity_last_time = stock_list['my_quantities'][stock_index]
+      price_paid_last_time = stock_list['my_total_prices_paid'][stock_index] / added_quantity_last_time
   return new_transaction_history
   

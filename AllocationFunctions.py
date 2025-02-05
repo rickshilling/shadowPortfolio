@@ -340,14 +340,15 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
         old_quantities = jnp.array(float(transaction_row[3::3]))
         old_quantity = np.sum(old_quantities)
         new_quantity = stock_list['my_quantities'][stock_index]
-        added_quantity = new_quantity - old_quantity
-        if abs(added_quantity) > eps:
-          # Calculate average price paid on added quantity
+        added_quantity_last_time = new_quantity - old_quantity
+        if abs(added_quantity_last_time) > eps:
           new_total_price_paid = stock_list['my_total_prices_paid'][stock_index]
-          new_average_price_paid = new_total_price_paid/new_quantity
-          old_prices = jnp.array(float(transaction_row[2::3]))
+          old_prices = jnp.array(float(transaction_row[2::3]))        
           old_total_price_paid = jnp.dot(old_quantities, old_prices)
-          pass
+          price_paid_last_time = (new_total_price_paid - old_total_price_paid)/added_quantity_last_time
+        else:
+          price_paid_last_time = 0
+        
         break
     if not stock_in_transaction_history: 
       pass

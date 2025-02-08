@@ -330,7 +330,9 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
   #   In stock_list, in transaction_history
   #   In stock_list, out transaction_history
   #  Out stock_list, in  transaction_history
-  
+  added_tickers = []
+  added_quantities = []
+  added_prices = []
   for stock_index, stock_ticker_string in enumerate(stock_list['tickers']):
     stock_in_transaction_history = False
     for transaction_row_index, transaction_row in transaction_history.iterrows():
@@ -345,12 +347,27 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
           new_total_price_paid = stock_list['my_total_prices_paid'][stock_index]
           old_prices = jnp.array(float(transaction_row[2::3]))        
           old_total_price_paid = jnp.dot(old_quantities, old_prices)
-          price_paid_last_time = (new_total_price_paid - old_total_price_paid)/added_quantity_last_time
+          added_price_paid = (new_total_price_paid - old_total_price_paid)/added_quantity_last_time
         else:
-          price_paid_last_time = 0
+          added_price_paid = 0
         break
     if not stock_in_transaction_history:
       added_quantity_last_time = stock_list['my_quantities'][stock_index]
-      price_paid_last_time = stock_list['my_total_prices_paid'][stock_index] / added_quantity_last_time
+      if abs(added_quantity_last_time) > eps:
+        added_price_paid = stock_list['my_total_prices_paid'][stock_index] / added_quantity_last_time
+      else:
+         added_price_paid = 0
+    added_tickers.append(stock_ticker_string)
+    added_quantities.append(added_quantity_last_time)
+    added_prices.append(added_price_paid)
+  for transaction_row_index, transaction_row in transaction_history.iterrows():
+    stock_in_list = False
+    for stock_index, stock_ticker_string in enumerate(stock_list['tickers']):
+       if stock_ticker_string == transaction_row['Ticker']:
+        stock_in_list = True
+    if not stock_in_list:
+      added_tickers.append(transaction_row['Ticker'])
+      added_quantities.append(0)
+      added_prices.append(0)
   return new_transaction_history
   

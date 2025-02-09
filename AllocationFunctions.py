@@ -333,6 +333,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
   added_tickers = []
   added_quantities = []
   added_prices = []
+  added_transaction_row_indices = []
   for stock_index, stock_ticker_string in enumerate(stock_list['tickers']):
     stock_in_transaction_history = False
     for transaction_row_index, transaction_row in transaction_history.iterrows():
@@ -343,6 +344,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
         old_quantity = np.sum(old_quantities)
         new_quantity = stock_list['my_quantities'][stock_index]
         added_quantity_last_time = new_quantity - old_quantity
+        added_transaction_row_index = transaction_row_index
         if abs(added_quantity_last_time) > eps:
           new_total_price_paid = stock_list['my_total_prices_paid'][stock_index]
           old_prices = jnp.array(float(transaction_row[2::3]))        
@@ -353,6 +355,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
         break
     if not stock_in_transaction_history:
       added_quantity_last_time = stock_list['my_quantities'][stock_index]
+      added_transaction_row_index = -1
       if abs(added_quantity_last_time) > eps:
         added_price_paid = stock_list['my_total_prices_paid'][stock_index] / added_quantity_last_time
       else:
@@ -360,6 +363,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
     added_tickers.append(stock_ticker_string)
     added_quantities.append(added_quantity_last_time)
     added_prices.append(added_price_paid)
+    added_transaction_row_indices.append(added_transaction_row_index)
   for transaction_row_index, transaction_row in transaction_history.iterrows():
     stock_in_list = False
     for stock_index, stock_ticker_string in enumerate(stock_list['tickers']):
@@ -369,5 +373,12 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
       added_tickers.append(transaction_row['Ticker'])
       added_quantities.append(0)
       added_prices.append(0)
+      added_transaction_row_indices.append(-1)
+  date_string = 'Date ' + str(new_date)
+  price_string = 'Price Paid $ ' + str(new_date)
+  quantity_string = 'Quantity ' + str(new_date)
+  new_transaction_history.insert(1,date_string,0)
+  new_transaction_history.insert(2,price_string,0)
+  new_transaction_history.insert(3,quantity_string,0)
   return new_transaction_history
   

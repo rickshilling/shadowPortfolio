@@ -334,7 +334,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
        if stock_ticker_string == transaction_row['Ticker']:
         # Compare quantities in stock_list and transaction_history
         stock_in_transaction_history = True
-        old_quantities = jnp.array(float(transaction_row[3::3]))
+        old_quantities = transaction_row[3::3].values
         old_quantity = np.sum(old_quantities)
         new_quantity = stock_list['my_quantities'][stock_index]
         added_quantity_last_time = new_quantity - old_quantity

@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import math
 import jax.numpy as jnp
 
 def udpate_transaction_history(transaction_history:pd.DataFrame, 
@@ -9,7 +8,6 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
                                eps = 1e-6):
   _, num_cols = transaction_history.shape
   num_dates = int(num_cols / 2)
-  num_new_dates = num_dates + 1
   new_transaction_history = transaction_history
   # 3 possiblities:
   #   In stock_list, in transaction_history
@@ -23,7 +21,6 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
     stock_in_transaction_history = False
     for transaction_row_index, transaction_row in transaction_history.iterrows():
        if stock_ticker_string == transaction_row['Ticker']:
-        # Compare quantities in stock_list and transaction_history
         stock_in_transaction_history = True
         old_quantities = transaction_row[2::3].values
         old_quantity = np.sum(old_quantities)

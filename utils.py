@@ -8,7 +8,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
                                new_date,
                                eps = 1e-6):
   _, num_cols = transaction_history.shape
-  num_dates = int(num_cols / 3)
+  num_dates = int(num_cols / 2)
   num_new_dates = num_dates + 1
   new_transaction_history = transaction_history
   # 3 possiblities:
@@ -25,7 +25,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
        if stock_ticker_string == transaction_row['Ticker']:
         # Compare quantities in stock_list and transaction_history
         stock_in_transaction_history = True
-        old_quantities = transaction_row[3::3].values
+        old_quantities = transaction_row[2::3].values
         old_quantity = np.sum(old_quantities)
         new_quantity = stock_list['my_quantities'][stock_index]
         added_quantity_last_time = new_quantity - old_quantity
@@ -58,26 +58,20 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
       added_tickers.append(transaction_row['Ticker'])
       added_quantities.append(0)
       added_prices.append(0)
-      # added_transaction_row_indices.append(-1)
       added_transaction_row_indices.append(transaction_row_index)
 
-  date_string = 'Date ' + str(num_new_dates)
-  price_string = 'Price paid $ ' + str(num_new_dates)
-  quantity_string = 'Quantity ' + str(num_new_dates)
-  new_transaction_history.insert(1,date_string,0)
-  new_transaction_history.insert(2,price_string,0)
-  new_transaction_history.insert(3,quantity_string,0)
+  price_string = 'Price paid ' + str(new_date)
+  quantity_string = 'Quantity ' + str(new_date)
+  new_transaction_history.insert(1,price_string,0)
+  new_transaction_history.insert(2,quantity_string,0)
   for (added_ticker, added_quantity, added_price, added_transaction_row) in zip(added_tickers, added_quantities, added_prices, added_transaction_row_indices):
     if added_transaction_row != -1:
-      new_transaction_history.iat[added_transaction_row, 1] =  str(new_date)
-      new_transaction_history.iat[added_transaction_row, 2] =  added_price
-      new_transaction_history.iat[added_transaction_row, 3] =  added_quantity
+      new_transaction_history.iat[added_transaction_row, 1] =  added_price
+      new_transaction_history.iat[added_transaction_row, 2] =  added_quantity
     else:
       new_row = {'Ticker': added_ticker, 
-                 date_string: str(new_date),
                  price_string: added_price,
                  quantity_string: added_quantity}
-      # new_transaction_history = new_transaction_history.append(new_row, ignore_index=True)
       new_transaction_history = pd.concat([new_transaction_history, pd.DataFrame([new_row])], ignore_index=True)
 
   return new_transaction_history

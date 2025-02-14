@@ -22,7 +22,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
     for transaction_row_index, transaction_row in transaction_history.iterrows():
        if stock_ticker_string == transaction_row['Ticker']:
         stock_in_transaction_history = True
-        old_quantities = transaction_row[1::2].values
+        old_quantities = transaction_row[2::2].values
         old_quantity = np.sum(old_quantities)
         new_quantity = stock_list['my_quantities'][stock_index]
         added_quantity_last_time = new_quantity - old_quantity

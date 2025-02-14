@@ -22,14 +22,14 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
     for transaction_row_index, transaction_row in transaction_history.iterrows():
        if stock_ticker_string == transaction_row['Ticker']:
         stock_in_transaction_history = True
-        old_quantities = transaction_row[2::3].values
+        old_quantities = transaction_row[0::2].values
         old_quantity = np.sum(old_quantities)
         new_quantity = stock_list['my_quantities'][stock_index]
         added_quantity_last_time = new_quantity - old_quantity
         added_transaction_row_index = transaction_row_index
         if abs(added_quantity_last_time) > eps:
           new_total_price_paid = stock_list['my_total_prices_paid'][stock_index]
-          old_prices = jnp.array(float(transaction_row[2::3]))        
+          old_prices = jnp.array(float(transaction_row[1::2]))        
           old_total_price_paid = jnp.dot(old_quantities, old_prices)
           added_price_paid = (new_total_price_paid - old_total_price_paid)/added_quantity_last_time
         else:
@@ -73,3 +73,12 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
 
   return new_transaction_history
   
+  # Rules
+  #  1. The variance of the total cost basis of a stock per unit time owned is minimized among stocks with similar P/Es.
+  #  2. Stocks with lower P/Es have a higher total cost basis per unit time than stocks with higher P/Es.
+
+def get_cost_basis_per_time(transaction_history):
+    for transaction_row_index, transaction_row in transaction_history.iterrows():
+        quantities = transaction_row[1::2].values
+        prices = jnp.array(float(transaction_row[1::2]))        
+        total_price_paid = jnp.dot(quantities, prices)

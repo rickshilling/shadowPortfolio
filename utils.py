@@ -77,7 +77,10 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
   #  1. The variance of the total cost basis of a stock per unit time owned is minimized among stocks with similar P/Es.
   #  2. Stocks with lower P/Es have a higher total cost basis per unit time than stocks with higher P/Es.
 
-def get_cost_basis_per_time(transaction_history):
+def get_cost_basis_per_time(transaction_history, today):
+    headers = transaction_history.columns
+    price_headers = headers[1::2]
+
     for transaction_row_index, transaction_row in transaction_history.iterrows():
         quantities = transaction_row[1::2].values
         prices = jnp.array(float(transaction_row[1::2]))        

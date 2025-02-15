@@ -89,15 +89,17 @@ def get_cost_basis_per_time(transaction_history, today):
         datetime_object = datetime.strptime(day_string, date_format).date()
         dates.append(datetime_object)
 
-    price_paid_per_time_owned_list = []
     for transaction_row_index, transaction_row in transaction_history.iterrows():
-        quantities = transaction_row[2::2].values
-        prices = transaction_row[1::2].values
-        for index, current_date in enumerate(dates):
-          day_delta = today.day-current_date.day
-          if day_delta > 0:
-            price_paid_per_time_owned = quantities[index]*prices[index]/day_delta
-          else:
-            price_paid_per_time_owned = 0
-          price_paid_per_time_owned_list.append(price_paid_per_time_owned)
+      quantities = transaction_row[2::2].values
+      prices = transaction_row[1::2].values
+      price_paid_per_time_owned_list = []
+      for index, current_date in enumerate(dates):
+        day_delta = today.day-current_date.day
+        if day_delta > 0:
+          price_paid_per_time_owned = quantities[index]*prices[index]/day_delta
+        else:
+          price_paid_per_time_owned = 0
+        price_paid_per_time_owned_list.append(price_paid_per_time_owned)
+      average_price_paid_per_time_owned = sum(price_paid_per_time_owned_list)/len(price_paid_per_time_owned_list)
+        
         

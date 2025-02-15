@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import jax.numpy as jnp
+from datetime import datetime
 
 def udpate_transaction_history(transaction_history:pd.DataFrame, 
                                stock_list,
@@ -80,8 +81,18 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
 def get_cost_basis_per_time(transaction_history, today):
     headers = transaction_history.columns
     price_headers = headers[1::2]
+    days = []
+    for price_header in price_headers:
+        day_string = price_header.split()[-1]
+        date_format = "%Y-%m-%d"
+        datetime_object = datetime.strptime(day_string, date_format)
+        days.append(datetime_object)
 
+    price_paid_per_time_owned_list = []
     for transaction_row_index, transaction_row in transaction_history.iterrows():
-        quantities = transaction_row[1::2].values
-        prices = jnp.array(float(transaction_row[1::2]))        
-        total_price_paid = jnp.dot(quantities, prices)
+        quantities = transaction_row[2::2].values
+        prices = jnp.array(float(transaction_row[1::2].values))
+        time_deltas = []
+        for day in days:
+          time_deltas.append(today-day)
+        pass

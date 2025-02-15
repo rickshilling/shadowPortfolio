@@ -79,7 +79,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
   #  1. The variance of the total cost basis of a stock per unit time owned is minimized among stocks with similar P/Es.
   #  2. Stocks with lower P/Es have a higher total cost basis per unit time than stocks with higher P/Es.
 
-def get_cost_basis_per_time(transaction_history, today):
+def get_cost_basis_per_time(transaction_history, today, eps = 1e-6):
     headers = transaction_history.columns
     price_headers = headers[1::2]
     dates = []
@@ -95,11 +95,13 @@ def get_cost_basis_per_time(transaction_history, today):
       price_paid_per_time_owned_list = []
       for index, current_date in enumerate(dates):
         day_delta = today.day-current_date.day
-        if day_delta > 0:
+        if np.abs(day_delta) > 0 and np.abs(quantities[index]) > eps :
           price_paid_per_time_owned = quantities[index]*prices[index]/day_delta
-        else:
-          price_paid_per_time_owned = 0
-        price_paid_per_time_owned_list.append(price_paid_per_time_owned)
-      average_price_paid_per_time_owned = sum(price_paid_per_time_owned_list)/len(price_paid_per_time_owned_list)
+          price_paid_per_time_owned_list.append(price_paid_per_time_owned)
+      num_nonzero_transactions = len(price_paid_per_time_owned_list)
+      if num_nonzero_transactions > 0:
+        average_price_paid_per_time_owned = sum(price_paid_per_time_owned_list)/num_nonzero_transactions
+      else:
+        average_price_paid_per_time_owned = 0
         
         

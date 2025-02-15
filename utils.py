@@ -24,14 +24,14 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
     for transaction_row_index, transaction_row in transaction_history.iterrows():
        if stock_ticker_string == transaction_row['Ticker']:
         stock_in_transaction_history = True
-        old_quantities = transaction_row[2::2].values
+        old_quantities = transaction_row[2::2].values.astype(float)
         old_quantity = np.sum(old_quantities)
         new_quantity = stock_list['my_quantities'][stock_index]
         added_quantity_last_time = new_quantity - old_quantity
         added_transaction_row_index = transaction_row_index
         if abs(added_quantity_last_time) > eps:
           new_total_price_paid = stock_list['my_total_prices_paid'][stock_index]
-          old_prices = jnp.array(float(transaction_row[1::2]))        
+          old_prices = transaction_row[1::2].values.astype(float)        
           old_total_price_paid = jnp.dot(old_quantities, old_prices)
           added_price_paid = (new_total_price_paid - old_total_price_paid)/added_quantity_last_time
         else:
@@ -43,7 +43,7 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
       if abs(added_quantity_last_time) > eps:
         added_price_paid = stock_list['my_total_prices_paid'][stock_index] / added_quantity_last_time
       else:
-         added_price_paid = 0
+        added_price_paid = 0
     added_tickers.append(stock_ticker_string)
     added_quantities.append(added_quantity_last_time)
     added_prices.append(added_price_paid)

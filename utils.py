@@ -94,7 +94,7 @@ def get_cost_basis_per_time(transaction_history, today, eps = 1e-6):
       prices = transaction_row[1::2].values
       price_paid_per_time_owned_list = []
       for index, current_date in enumerate(dates):
-        day_delta = today.day-current_date.day
+        day_delta = (today-current_date).days
         if np.abs(day_delta) > 0 and np.abs(quantities[index]) > eps :
           price_paid_per_time_owned = quantities[index]*prices[index]/day_delta
           price_paid_per_time_owned_list.append(price_paid_per_time_owned)

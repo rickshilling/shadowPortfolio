@@ -85,8 +85,7 @@ def get_cost_basis_per_time(transaction_history, today, eps = 1e-6):
     dates = []
     for price_header in price_headers:
         day_string = price_header.split()[-1]
-        date_format = "%Y-%m-%d"
-        datetime_object = datetime.strptime(day_string, date_format).date()
+        datetime_object = datetime.strptime(date_string = day_string, format="%Y-%m-%d").date()
         dates.append(datetime_object)
 
     for transaction_row_index, transaction_row in transaction_history.iterrows():

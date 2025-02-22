@@ -79,28 +79,37 @@ def udpate_transaction_history(transaction_history:pd.DataFrame,
   #  1. The variance of the total cost basis of a stock per unit time owned is minimized among stocks with similar P/Es.
   #  2. Stocks with lower P/Es have a higher total cost basis per unit time than stocks with higher P/Es.
 
-def get_cost_basis_per_time(transaction_history, today, eps = 1e-6):
-    headers = transaction_history.columns
-    price_headers = headers[1::2]
-    dates = []
-    for price_header in price_headers:
-        day_string = price_header.split()[-1]
-        datetime_object = datetime.strptime(date_string = day_string, format="%Y-%m-%d").date()
-        dates.append(datetime_object)
+def get_average_price_paid_per_time_owned(transaction_history, today, stock_list, eps = 1e-6):
+  headers = transaction_history.columns
+  price_headers = headers[1::2]
+  dates = []
+  for price_header in price_headers:
+      day_string = price_header.split()[-1]
+      datetime_object = datetime.strptime(day_string, "%Y-%m-%d").date()
+      dates.append(datetime_object)
 
-    for transaction_row_index, transaction_row in transaction_history.iterrows():
-      quantities = transaction_row[2::2].values
-      prices = transaction_row[1::2].values
-      price_paid_per_time_owned_list = []
-      for index, current_date in enumerate(dates):
-        day_delta = (today-current_date).days
-        if np.abs(day_delta) > 0 and np.abs(quantities[index]) > eps :
-          price_paid_per_time_owned = quantities[index]*prices[index]/day_delta
-          price_paid_per_time_owned_list.append(price_paid_per_time_owned)
-      num_nonzero_transactions = len(price_paid_per_time_owned_list)
-      if num_nonzero_transactions > 0:
-        average_price_paid_per_time_owned = sum(price_paid_per_time_owned_list)/num_nonzero_transactions
-      else:
-        average_price_paid_per_time_owned = 0
-        
-        
+  average_price_paid_per_time_owned_list = dict()
+  for transaction_row_index, transaction_row in transaction_history.iterrows():
+    quantities = transaction_row[2::2].values
+    prices = transaction_row[1::2].values
+    price_paid_per_time_owned_list = []
+    for index, current_date in enumerate(dates):
+      day_delta = (today-current_date).days
+      if np.abs(day_delta) > 0 and np.abs(quantities[index]) > eps :
+        price_paid_per_time_owned = quantities[index]*prices[index]/day_delta
+        price_paid_per_time_owned_list.append(price_paid_per_time_owned)
+    num_nonzero_transactions = len(price_paid_per_time_owned_list)
+    if num_nonzero_transactions > 0:
+      average_price_paid_per_time_owned = sum(price_paid_per_time_owned_list)/num_nonzero_transactions
+    else:
+      average_price_paid_per_time_owned = 0
+    average_price_paid_per_time_owned_list[transaction_row['Ticker']] = average_price_paid_per_time_owned
+  stock_list["average_price_paid_per_time_owned"] = average_price_paid_per_time_owned_list
+  return stock_list
+
+def optimize_by_average_price_per_time_owned(stock_list):
+  average_price_paid_per_time_owned_list = stock_list["average_price_paid_per_time_owned"]
+  overall_average_price_paid_per_time_owned_list = np.mean(np.array(list(average_price_paid_per_time_owned_list.values())))
+  for ticker in average_price_paid_per_time_owned_list.keys():
+    average_price_paid_per_time_owned = average_price_paid_per_time_owned_list[ticker]
+    pass

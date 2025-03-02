@@ -43,7 +43,21 @@ def equal_row(row1, row2, eps = 1e-6):
         row1['TransactionDate'] == row2['TransactionDate'] and \
         row1['TransactionType'] == row2['TransactionType'] and \
         row1['SecurityType'] == row2['SecurityType'] and \
+        row1['Symbol'] == row2['Symbol'] and \
         np.abs(row1['Quantity'] - row2['Quantity']) < eps and \
         np.abs(row1['Amount'] - row2['Amount']) < eps and \
         np.abs(row1['Price'] - row2['Price']) < eps
     return result
+
+def verify_no_duplicate_rows(transactions:pd.DataFrame):
+    num_rows = len(transactions)
+    no_duplicate_rows = True
+    for ii in range(num_rows-1):
+        row_ii = transactions.iloc[ii]
+        for jj in range(ii+1,num_rows):
+            row_jj = transactions.iloc[jj]
+            no_duplicate_rows = no_duplicate_rows and not equal_row(row_ii,row_jj)
+            if not no_duplicate_rows:
+                break
+                # pass
+    return no_duplicate_rows

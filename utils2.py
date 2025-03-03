@@ -51,12 +51,12 @@ def equal_row(row1, row2, eps = 1e-6):
 
 
 def set_average_price_paid_per_time_owned(transactions, shadow, today, eps = 1e-6):
-    for _, shadow_element in shadow.iterrows():
-        shadow_ticker_string = shadow_element['Ticker'].replace("*","")
+    for _, shadow_row in shadow.iterrows():
+        shadow_ticker = shadow_row['Ticker'].replace("*","")
         prices = []
         delta_times = []
         for _, transaction_row in transactions.iterrows():
-            if shadow_ticker_string == transaction_row['Symbol']:
+            if shadow_ticker == transaction_row['Symbol']:
                 delta_time = (today - transaction_row['TransactionDate'].to_pydatetime().date()).days
                 prices.append(transaction_row['Amount'])
                 delta_times.append(delta_time)

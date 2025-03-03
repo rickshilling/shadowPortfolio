@@ -25,13 +25,13 @@ def update_transactions(old_transactions:pd.DataFrame,
         new_row_index = start_new_row_index
         while not stop:
             at_end = new_row_index == num_new_rows
-            if not at_end:
+            if at_end:
+                stop = True
+            else:
                 if equal_row(new_transactions.iloc[new_row_index], add_row):
                     stop = True
                 else:
                     new_row_index = new_row_index + 1
-            else:
-                stop = True
         if at_end:
             new_transactions = pd.concat([new_transactions, add_row.to_frame().T], ignore_index=True)
         add_row_index = add_row_index + 1

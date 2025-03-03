@@ -49,15 +49,44 @@ def equal_row(row1, row2, eps = 1e-6):
         np.abs(row1['Price'] - row2['Price']) < eps
     return result
 
-def verify_no_duplicate_rows(transactions:pd.DataFrame):
-    num_rows = len(transactions)
-    no_duplicate_rows = True
-    for ii in range(num_rows-1):
-        row_ii = transactions.iloc[ii]
-        for jj in range(ii+1,num_rows):
-            row_jj = transactions.iloc[jj]
-            no_duplicate_rows = no_duplicate_rows and not equal_row(row_ii,row_jj)
-            if not no_duplicate_rows:
-                break
-                # pass
-    return no_duplicate_rows
+
+def set_average_price_paid_per_time_owned(transactions, shadow, today, eps = 1e-6):
+    for _, shadow_element in shadow.iterrows():
+        shadow_ticker_string = shadow_element['Ticker'].replace("*","")
+        prices = []
+        delta_times = []
+        for _, transaction_row in transactions.iterrows():
+            if shadow_ticker_string == transaction_row['Symbol']:
+                delta_time = (today - transaction_row['TransactionDate'].to_pydatetime().date()).days
+                prices.append(transaction_row['Amount'])
+                delta_times.append(delta_time)
+            sorted_indices = np.argsort(delta_times)
+            
+            pass
+    return shadow
+
+#   headers = transaction_history.columns
+#   price_headers = headers[1::2]
+#   dates = []
+#   for price_header in price_headers:
+#       day_string = price_header.split()[-1]
+#       datetime_object = datetime.strptime(day_string, "%Y-%m-%d").date()
+#       dates.append(datetime_object)
+
+#   average_price_paid_per_time_owned_list = dict()
+#   for transaction_row_index, transaction_row in transaction_history.iterrows():
+#     quantities = transaction_row[2::2].values
+#     prices = transaction_row[1::2].values
+#     price_paid_per_time_owned_list = []
+#     for index, current_date in enumerate(dates):
+#       day_delta = (today-current_date).days
+#       if np.abs(day_delta) > 0 and np.abs(quantities[index]) > eps :
+#         price_paid_per_time_owned = quantities[index]*prices[index]/day_delta
+#         price_paid_per_time_owned_list.append(price_paid_per_time_owned)
+#     num_nonzero_transactions = len(price_paid_per_time_owned_list)
+#     if num_nonzero_transactions > 0:
+#       average_price_paid_per_time_owned = sum(price_paid_per_time_owned_list)/num_nonzero_transactions
+#     else:
+#       average_price_paid_per_time_owned = 0
+#     average_price_paid_per_time_owned_list[transaction_row['Ticker']] = average_price_paid_per_time_owned
+#   stock_list["average_price_paid_per_time_owned"] = average_price_paid_per_time_owned_list

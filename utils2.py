@@ -66,6 +66,9 @@ def set_average_price_paid_per_time_owned(transactions, shadow, today, eps = 1e-
             delta_times, prices = remove_sells(delta_times, prices)
 
 def remove_sells(delta_times, prices, eps = 1e-6):
+    # Sign Convention:
+    #   price > 0 => Refers to a sell
+    #   price < 0 => Refers to a buy
     sorted_indices = np.argsort(delta_times)[::-1]
     delta_times = [delta_times[i] for i in sorted_indices]
     prices = [prices[i] for i in sorted_indices]
@@ -77,7 +80,7 @@ def remove_sells(delta_times, prices, eps = 1e-6):
         del prices[sell_index]
         del delta_times[sell_index]
     remaining_sum_of_sells = sum_of_sells
-    while remaining_sum_of_sells > 0:
+    while remaining_sum_of_sells > 0 and len(prices) > 0:
         remaining_sum_of_sells = remaining_sum_of_sells + prices[0]
         if remaining_sum_of_sells > 0:
             del prices[0]

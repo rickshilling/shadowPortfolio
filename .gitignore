@@ -1,4 +1,6 @@
 *.csv
 *.xlsx
 !TransactionHistory.xlsx
+!PortfolioDownload.xlsx
+!AAII.xlsx
 __pycache__

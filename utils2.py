@@ -60,11 +60,34 @@ def set_average_price_paid_per_time_owned(transactions, shadow, today, eps = 1e-
                 delta_time = (today - transaction_row['TransactionDate'].to_pydatetime().date()).days
                 prices.append(transaction_row['Amount'])
                 delta_times.append(delta_time)
-            sorted_indices = np.argsort(delta_times)
-            
+        if delta_times == []:
             pass
-    return shadow
+        else:
+            delta_times, prices = remove_sells(delta_times, prices)
 
+def remove_sells(delta_times, prices, eps = 1e-6):
+    sorted_indices = np.argsort(delta_times)[::-1]
+    delta_times = [delta_times[i] for i in sorted_indices]
+    prices = [prices[i] for i in sorted_indices]
+    sell_indices = [i for i, price in enumerate(prices) if price > 0]
+    sell_indices.sort(reverse=True)
+    sum_of_sells = 0
+    for sell_index in sell_indices:
+        sum_of_sells = sum_of_sells + prices[sell_index] 
+        del prices[sell_index]
+        del delta_times[sell_index]
+    remaining_sum_of_sells = sum_of_sells
+    while remaining_sum_of_sells > 0:
+        remaining_sum_of_sells = remaining_sum_of_sells + prices[0]
+        if remaining_sum_of_sells > 0:
+            del prices[0]
+            del delta_times[0]
+        else:
+            prices[0] = remaining_sum_of_sells
+    return delta_times, prices
+
+# buy_index = se
+# return shadow
 #   headers = transaction_history.columns
 #   price_headers = headers[1::2]
 #   dates = []
@@ -72,7 +95,6 @@ def set_average_price_paid_per_time_owned(transactions, shadow, today, eps = 1e-
 #       day_string = price_header.split()[-1]
 #       datetime_object = datetime.strptime(day_string, "%Y-%m-%d").date()
 #       dates.append(datetime_object)
-
 #   average_price_paid_per_time_owned_list = dict()
 #   for transaction_row_index, transaction_row in transaction_history.iterrows():
 #     quantities = transaction_row[2::2].values

@@ -64,7 +64,8 @@ def set_average_price_paid_per_time_owned(transactions, shadow, today, eps = 1e-
         if delta_times == []:
             pass
         else:
-            delta_times, prices = remove_sells(delta_times, prices)
+            delta_times, prices, sum_of_sells = remove_sells(delta_times, prices)
+            delta_times, prices = reduce_buys(delta_times, prices, sum_of_sells)
 
 def remove_sells(delta_times, prices, eps = 1e-6):
     # Sign Convention:
@@ -80,6 +81,9 @@ def remove_sells(delta_times, prices, eps = 1e-6):
         sum_of_sells = sum_of_sells + prices[sell_index] 
         del prices[sell_index]
         del delta_times[sell_index]
+    return delta_times, prices, sum_of_sells
+
+def reduce_buys(delta_times, prices, sum_of_sells):
     total_distribution_amount = sum_of_sells
     while total_distribution_amount > 0 and len(prices) > 0:
         num_buys = len(prices)
@@ -97,4 +101,7 @@ def remove_sells(delta_times, prices, eps = 1e-6):
         for deletion_index in deletion_indices:
             del prices[deletion_index]
             del delta_times[deletion_index]
+    if len(prices) == 0:
+        # total_distribution_amount <= 0
+        pass
     return delta_times, prices

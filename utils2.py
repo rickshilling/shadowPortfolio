@@ -51,7 +51,8 @@ def equal_row(row1, row2, eps = 1e-6):
     return result
 
 
-def set_average_price_paid_per_time_owned(transactions, shadow, today, eps = 1e-6):
+def get_average_price_paid_per_time(transactions, shadow, today, eps = 1e-6):
+    average_price_per_time = dict()
     for _, shadow_row in shadow.iterrows():
         shadow_ticker = shadow_row['Ticker'].replace("*","")
         prices = []
@@ -63,10 +64,16 @@ def set_average_price_paid_per_time_owned(transactions, shadow, today, eps = 1e-
                 prices.append(transaction_row['Amount'])
                 delta_times.append(delta_time)
         if delta_times == []:
-            pass
+            average_price_per_time[shadow_ticker] = 0
         else:
-            delta_times, prices, sum_of_sells = remove_sells(delta_times, prices)
-            delta_times, prices = reduce_buys(delta_times, prices, sum_of_sells)
+            # delta_times, prices, sum_of_sells = remove_sells(delta_times, prices)
+            # delta_times, prices = reduce_buys(delta_times, prices, sum_of_sells)
+            price_paid_per_time = 0
+            for price, delta_time in zip(prices, delta_times):
+                if delta_time > 0:
+                    price_paid_per_time = price_paid_per_time + price/delta_time
+            average_price_per_time[shadow_ticker] = price_paid_per_time/len(prices)
+    return average_price_per_time
 
 def remove_sells(delta_times, prices, eps = 1e-6):
     # Sign Convention:

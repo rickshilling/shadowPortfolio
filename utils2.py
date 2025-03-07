@@ -58,7 +58,8 @@ def set_average_price_paid_per_time_owned(transactions, shadow, today, eps = 1e-
         delta_times = []
         for _, transaction_row in transactions.iterrows():
             if shadow_ticker == transaction_row['Symbol']:
-                delta_time = (today - transaction_row['TransactionDate'].to_pydatetime().date()).days
+                TransactionDate = transaction_row['TransactionDate'].to_pydatetime().date()
+                delta_time = (today - TransactionDate).days
                 prices.append(transaction_row['Amount'])
                 delta_times.append(delta_time)
         if delta_times == []:
@@ -83,9 +84,11 @@ def remove_sells(delta_times, prices, eps = 1e-6):
         del delta_times[sell_index]
     return delta_times, prices, sum_of_sells
 
-def reduce_buys(delta_times, prices, sum_of_sells):
-    total_distribution_amount = sum_of_sells
+def reduce_buys(delta_times, prices, total_distribution_amount):
     while total_distribution_amount > 0 and len(prices) > 0:
+        # Sign Convention:
+        #   price > 0 => Refers to a sell
+        #   price < 0 => Refers to a buy
         num_buys = len(prices)
         distribution_amount = total_distribution_amount / num_buys
         total_distribution_amount = 0

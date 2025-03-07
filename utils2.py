@@ -3,6 +3,7 @@ import pandas as pd
 import jax.numpy as jnp
 from datetime import datetime
 from datetime import date
+import copy
 
 def update_transactions(old_transactions:pd.DataFrame,
                         add_transactions:pd.DataFrame,
@@ -79,39 +80,21 @@ def remove_sells(delta_times, prices, eps = 1e-6):
         sum_of_sells = sum_of_sells + prices[sell_index] 
         del prices[sell_index]
         del delta_times[sell_index]
-    remaining_sum_of_sells = sum_of_sells
-    while remaining_sum_of_sells > 0 and len(prices) > 0:
-        remaining_sum_of_sells = remaining_sum_of_sells + prices[0]
-        if remaining_sum_of_sells > 0:
-            del prices[0]
-            del delta_times[0]
-        else:
-            prices[0] = remaining_sum_of_sells
+    total_distribution_amount = sum_of_sells
+    while total_distribution_amount > 0 and len(prices) > 0:
+        num_buys = len(prices)
+        distribution_amount = total_distribution_amount / num_buys
+        total_distribution_amount = 0
+        deletion_indices = []
+        for buy_index, price in enumerate(prices):
+            reduced_price = price + distribution_amount
+            if reduced_price > 0:
+                deletion_indices.append(buy_index)
+                total_distribution_amount = total_distribution_amount + reduced_price
+            else:
+                prices[buy_index] = reduced_price
+        deletion_indices.sort(reverse=True)
+        for deletion_index in deletion_indices:
+            del prices[deletion_index]
+            del delta_times[deletion_index]
     return delta_times, prices
-
-# buy_index = se
-# return shadow
-#   headers = transaction_history.columns
-#   price_headers = headers[1::2]
-#   dates = []
-#   for price_header in price_headers:
-#       day_string = price_header.split()[-1]
-#       datetime_object = datetime.strptime(day_string, "%Y-%m-%d").date()
-#       dates.append(datetime_object)
-#   average_price_paid_per_time_owned_list = dict()
-#   for transaction_row_index, transaction_row in transaction_history.iterrows():
-#     quantities = transaction_row[2::2].values
-#     prices = transaction_row[1::2].values
-#     price_paid_per_time_owned_list = []
-#     for index, current_date in enumerate(dates):
-#       day_delta = (today-current_date).days
-#       if np.abs(day_delta) > 0 and np.abs(quantities[index]) > eps :
-#         price_paid_per_time_owned = quantities[index]*prices[index]/day_delta
-#         price_paid_per_time_owned_list.append(price_paid_per_time_owned)
-#     num_nonzero_transactions = len(price_paid_per_time_owned_list)
-#     if num_nonzero_transactions > 0:
-#       average_price_paid_per_time_owned = sum(price_paid_per_time_owned_list)/num_nonzero_transactions
-#     else:
-#       average_price_paid_per_time_owned = 0
-#     average_price_paid_per_time_owned_list[transaction_row['Ticker']] = average_price_paid_per_time_owned
-#   stock_list["average_price_paid_per_time_owned"] = average_price_paid_per_time_owned_list

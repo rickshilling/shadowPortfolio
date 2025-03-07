@@ -84,27 +84,28 @@ def remove_sells(delta_times, prices, eps = 1e-6):
         del delta_times[sell_index]
     return delta_times, prices, sum_of_sells
 
-def reduce_buys(delta_times, prices, total_distribution_amount):
-    while total_distribution_amount > 0 and len(prices) > 0:
-        # Sign Convention:
-        #   price > 0 => Refers to a sell
-        #   price < 0 => Refers to a buy
-        num_buys = len(prices)
-        distribution_amount = total_distribution_amount / num_buys
-        total_distribution_amount = 0
+def reduce_buys(delta_times, buy_prices, total_reduction_amount):
+    # Sign Convention:
+    #   price > 0 => Refers to a sell
+    #   price < 0 => Refers to a buy
+    # What happens when total_reduction_amount is more than the total is owned in prices 
+    while total_reduction_amount > 0 and len(buy_prices) > 0:
+        num_buys = len(buy_prices)
+        reduction_amount = total_reduction_amount / num_buys
+        total_reduction_amount = 0
         deletion_indices = []
-        for buy_index, price in enumerate(prices):
-            reduced_price = price + distribution_amount
+        for buy_index, price in enumerate(buy_prices):
+            reduced_price = price + reduction_amount
             if reduced_price > 0:
                 deletion_indices.append(buy_index)
-                total_distribution_amount = total_distribution_amount + reduced_price
+                total_reduction_amount = total_reduction_amount + reduced_price
             else:
-                prices[buy_index] = reduced_price
+                buy_prices[buy_index] = reduced_price
         deletion_indices.sort(reverse=True)
         for deletion_index in deletion_indices:
-            del prices[deletion_index]
+            del buy_prices[deletion_index]
             del delta_times[deletion_index]
-    if len(prices) == 0:
+    if len(buy_prices) == 0:
         # total_distribution_amount <= 0
         pass
-    return delta_times, prices
+    return delta_times, buy_prices

@@ -113,3 +113,46 @@ def optimize_by_average_price_per_time_owned(stock_list):
   for ticker in average_price_paid_per_time_owned_list.keys():
     average_price_paid_per_time_owned = average_price_paid_per_time_owned_list[ticker]
     pass
+
+
+def remove_sells(delta_times, prices, eps = 1e-6):
+    # Sign Convention:
+    #   price > 0 => Refers to a sell
+    #   price < 0 => Refers to a buy
+    sorted_indices = np.argsort(delta_times)[::-1]
+    delta_times = [delta_times[i] for i in sorted_indices]
+    prices = [prices[i] for i in sorted_indices]
+    sell_indices = [i for i, price in enumerate(prices) if price > 0]
+    sell_indices.sort(reverse=True)
+    sum_of_sells = 0
+    for sell_index in sell_indices:
+        sum_of_sells = sum_of_sells + prices[sell_index] 
+        del prices[sell_index]
+        del delta_times[sell_index]
+    return delta_times, prices, sum_of_sells
+
+def reduce_buys(delta_times, buy_prices, total_reduction_amount):
+    # Sign Convention:
+    #   price > 0 => Refers to a sell
+    #   price < 0 => Refers to a buy
+    # What happens when total_reduction_amount is more than the total is owned in prices 
+    while total_reduction_amount > 0 and len(buy_prices) > 0:
+        num_buys = len(buy_prices)
+        reduction_amount = total_reduction_amount / num_buys
+        total_reduction_amount = 0
+        deletion_indices = []
+        for buy_index, price in enumerate(buy_prices):
+            reduced_price = price + reduction_amount
+            if reduced_price > 0:
+                deletion_indices.append(buy_index)
+                total_reduction_amount = total_reduction_amount + reduced_price
+            else:
+                buy_prices[buy_index] = reduced_price
+        deletion_indices.sort(reverse=True)
+        for deletion_index in deletion_indices:
+            del buy_prices[deletion_index]
+            del delta_times[deletion_index]
+    if len(buy_prices) == 0:
+        # total_distribution_amount <= 0
+        pass
+    return delta_times, buy_prices

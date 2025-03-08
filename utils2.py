@@ -51,11 +51,13 @@ def equal_row(row1, row2, eps = 1e-6):
     return result
 
 def get_average_price_paid_per_time(transactions, shadow, today, eps = 1e-6):
+    stock_attributes = dict()
     average_price_per_time = dict()
     num_transactions = dict()
     unit_price = dict()
     for _, shadow_row in shadow.iterrows():
         shadow_ticker = shadow_row['Ticker'].replace("*","")
+        stock_attributes[shadow_ticker] = dict()
         prices = []
         delta_times = []
         unit_price[shadow_ticker] = shadow_row['Ticker']
@@ -66,6 +68,7 @@ def get_average_price_paid_per_time(transactions, shadow, today, eps = 1e-6):
                 prices.append(transaction_row['Amount'])
                 delta_times.append(delta_time)
         if delta_times == []:
+            average_price_per_time
             average_price_per_time[shadow_ticker] = 0
         else:
             # delta_times, prices, sum_of_sells = remove_sells(delta_times, prices)
@@ -75,6 +78,9 @@ def get_average_price_paid_per_time(transactions, shadow, today, eps = 1e-6):
                 if delta_time > 0:
                     price_paid_per_time = price_paid_per_time + price/delta_time
             average_price_per_time[shadow_ticker] = -price_paid_per_time/len(prices)
-        num_transactions[shadow_ticker] = len(prices)
-    return average_price_per_time, num_transactions
+        stock_attributes[shadow_ticker]['prices'] = prices
+        stock_attributes[shadow_ticker]['delta_times'] = delta_times
+        stock_attributes[shadow_ticker]['average_price_per_time'] = average_price_per_time[shadow_ticker]
+        stock_attributes[shadow_ticker]['num_transactions'] = len(delta_times)
+    return average_price_per_time, stock_attributes
 

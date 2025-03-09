@@ -116,3 +116,12 @@ def refactor_shadow_transactions(shadow_transactions):
     shadow_transactions['order'] = order
     return shadow_transactions
 
+def arg_min_variance(shadow_transactions, T, constraint = 27*7):
+    A = shadow_transactions['average_price_per_time']
+    n = shadow_transactions['num_transactions']
+    m = len(n)
+    u = shadow_transactions['current_price']
+    max_k = np.zeros((m,1))
+    for ii in range(m):
+        max_k[ii] = np.floor(constraint/u[ii])
+    A_j = lambda j, k : (A[j]*n[j] + k*u[j]/T)/(n[j] + 1) 

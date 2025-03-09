@@ -50,37 +50,69 @@ def equal_row(row1, row2, eps = 1e-6):
         np.abs(row1['Price'] - row2['Price']) < eps
     return result
 
-def get_average_price_paid_per_time(transactions, shadow, today, eps = 1e-6):
-    stock_attributes = dict()
-    average_price_per_time = dict()
-    num_transactions = dict()
-    unit_price = dict()
-    for _, shadow_row in shadow.iterrows():
+def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
+    shadow_transactions = dict()
+    for shadow_index, shadow_row in shadow.iterrows():
         shadow_ticker = shadow_row['Ticker'].replace("*","")
-        stock_attributes[shadow_ticker] = dict()
         prices = []
         delta_times = []
-        unit_price[shadow_ticker] = shadow_row['Ticker']
         for _, transaction_row in transactions.iterrows():
             if shadow_ticker == transaction_row['Symbol']:
                 TransactionDate = transaction_row['TransactionDate'].to_pydatetime().date()
-                delta_time = (today - TransactionDate).days
+                delta_time = (reference_date - TransactionDate).days
                 prices.append(transaction_row['Amount'])
                 delta_times.append(delta_time)
         if delta_times == []:
-            average_price_per_time
-            average_price_per_time[shadow_ticker] = 0
+            average_price_per_time = 0
         else:
-            # delta_times, prices, sum_of_sells = remove_sells(delta_times, prices)
-            # delta_times, prices = reduce_buys(delta_times, prices, sum_of_sells)
             price_paid_per_time = 0
             for price, delta_time in zip(prices, delta_times):
                 if delta_time > 0:
                     price_paid_per_time = price_paid_per_time + price/delta_time
-            average_price_per_time[shadow_ticker] = -price_paid_per_time/len(prices)
-        stock_attributes[shadow_ticker]['prices'] = prices
-        stock_attributes[shadow_ticker]['delta_times'] = delta_times
-        stock_attributes[shadow_ticker]['average_price_per_time'] = average_price_per_time[shadow_ticker]
-        stock_attributes[shadow_ticker]['num_transactions'] = len(delta_times)
-    return average_price_per_time, stock_attributes
+            average_price_per_time = -price_paid_per_time/len(prices)
+        shadow_transactions[shadow_ticker] = dict()
+        shadow_transactions[shadow_ticker]['current_price'] = shadow_row['CurrentPrice($)']
+        shadow_transactions[shadow_ticker]['num_transactions'] = len(delta_times)
+        shadow_transactions[shadow_ticker]['prices'] = prices
+        shadow_transactions[shadow_ticker]['delta_times'] = delta_times
+        shadow_transactions[shadow_ticker]['average_price_per_time'] = average_price_per_time
+        shadow_transactions[shadow_ticker]['index'] = shadow_index
+    return shadow_transactions
+
+def refactor_shadow_transactions(shadow_transactions):
+    max_num_transactions = 0
+    num_stocks = len(shadow_transactions.keys())
+    for ticker in shadow_transactions.keys():
+        max_num_transactions = np.maximum(max_num_transactions,shadow_transactions[ticker]['num_transactions'])
+    current_price = np.zeros((num_stocks,1))
+    num_transactions = np.zeros((num_stocks,), dtype=int)
+    prices = np.zeros((num_stocks,max_num_transactions))
+    delta_times = np.zeros((num_stocks,max_num_transactions))
+    average_price_per_time = np.zeros((num_stocks,1))
+    order = dict()
+    for stock_index in range(num_stocks):
+        found = False
+        for ticker in shadow_transactions.keys():
+            if shadow_transactions[ticker]['index'] == stock_index:
+                key = ticker
+                found = True
+                break
+        if found:
+            current_price[stock_index] = shadow_transactions[key]['current_price']
+            num_transactions[stock_index] = shadow_transactions[key]['num_transactions']
+            current_num_transactions = num_transactions[stock_index]
+            prices[stock_index][0:current_num_transactions] = shadow_transactions[key]['prices'] 
+            delta_times[stock_index][0:current_num_transactions] = shadow_transactions[key]['delta_times'] 
+            average_price_per_time[stock_index] = shadow_transactions[key]['average_price_per_time']
+            order[stock_index] = key
+        else:
+            error_string = 'Error: ' + str(stock_index) + ' does not have a key in shadow transactions'
+            print(error_string)
+    shadow_transactions['current_price'] = current_price
+    shadow_transactions['num_transactions'] = num_transactions
+    shadow_transactions['prices'] = prices
+    shadow_transactions['delta_times'] = delta_times
+    shadow_transactions['average_price_per_time'] = average_price_per_time
+    shadow_transactions['order'] = order
+    return shadow_transactions
 

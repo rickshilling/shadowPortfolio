@@ -122,15 +122,12 @@ def refactor_shadow_transactions(shadow_transactions):
 def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
     A = jnp.array(shadow_transactions['average_price_per_time'])
     n = jnp.array(shadow_transactions['num_transactions'])
-    m = jnp.array(shadow_transactions['num_stocks']) 
     u = jnp.array(shadow_transactions['current_price'])
-    # Let k_i be the number of shares for stock i
-    # let k = [k_1, k_2, ..., k_m]
+    m = jnp.array(shadow_transactions['num_stocks']) 
+    # Let k[i] be the number of shares for stock i
     max_k = np.zeros((m,1))
-    max_product = 1
     for i in range(m):
         max_k[i] = np.floor(limit/u[i])
-        max_product = max_product * max_k[i]
     A_k_i = jax.jit(jax.tree_util.Partial(A_n_u_T_k_i,A,n,u,T))
     Average_A_k = jax.jit(jax.tree_util.Partial(Average_A_n_u_T_k,A,n,u,T))
     pass

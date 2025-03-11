@@ -119,24 +119,31 @@ def refactor_shadow_transactions(shadow_transactions):
     shadow_transactions['num_stocks'] = len(num_transactions)
     return shadow_transactions
 
-def arg_min_variance(shadow_transactions, T, limit = 27*7):
+def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
     A = jnp.array(shadow_transactions['average_price_per_time'])
     n = jnp.array(shadow_transactions['num_transactions'])
     m = jnp.array(shadow_transactions['num_stocks']) 
     u = jnp.array(shadow_transactions['current_price'])
-    # Let k_j be the number of shares for stock j
+    # Let k_i be the number of shares for stock i
     # let k = [k_1, k_2, ..., k_m]
-    max_k_j = np.zeros((m,1))
-    max_k = 1
-    for ii in range(m):
-        max_k_j[ii] = np.floor(limit/u[ii])
-        max_k = max_k * max_k_j[ii]
-    a = A_fn(A,n,u,T,0,2)
-    A_fn_partial = jax.partial(A_fn,A,n,u,T)
-    aa = A_fn_partial(0,2)
+    max_ks = np.zeros((m,1))
+    max_product = 1
+    for i in range(m):
+        max_ks[i] = np.floor(limit/u[i])
+        max_product = max_product * max_ks[i]
+    A_i_ki = jax.jit(jax.tree_util.Partial(A_n_u_T_i_ki,A,n,u,T))
+    A_k = jax.jit(jax.tree_util.Partial(A_n_u_T_k,A,n,u,T))
     pass
 
 @jax.jit
-def A_fn(A,n,u,T,j,k):
-    result = (A[j]*n[j] + k*u[j]/T)/(n[j] + 1)
+def A_n_u_T_i_ki(A,n,u,T,i,ki):
+    return (A[i]*n[i] + ki*u[i]/T)/(n[i] + 1)
+
+@jax.jit
+def A_n_u_T_k(A,n,u,T,k):
+    m = A.shape[0]
+    result = 0
+    for i in range(m):
+        result = result + A_n_u_T_i_ki(A,n,u,T,i,k[i])
+    result = result/m
     return result

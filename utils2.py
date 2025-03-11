@@ -135,10 +135,13 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
 
 @jax.jit
 def A_n_u_T_k_i(A,n,u,T,k,i):
+    # A_n_u_T_k_i(A,n,u,T,k,i): Average price owned per time for stock i if
+    # k[i] units are added at unit price u[i] & owned for T time units  
     return (A[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
 
 @jax.jit
 def average_A_n_u_T_k(A,n,u,T,k):
+    # average_A_n_u_T_k(A,n,u,T,k): Average of Average price owned per time over all stocks 
     m = A.shape[0]
     result = 0
     for i in range(m):
@@ -152,6 +155,6 @@ def variance_A_n_u_T_k(A,n,u,T,k):
     m = A.shape[0]
     variance = 0
     for i in range(m):
-        variance = variance + (A_n_u_T_k_i(A,n,u,T,k,i) - average)^2
+        variance = variance + (A_n_u_T_k_i(A,n,u,T,k,i) - average)**2
     variance = variance/m
     return variance

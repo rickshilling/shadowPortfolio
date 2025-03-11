@@ -126,24 +126,24 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
     u = jnp.array(shadow_transactions['current_price'])
     # Let k_i be the number of shares for stock i
     # let k = [k_1, k_2, ..., k_m]
-    max_ks = np.zeros((m,1))
+    max_k = np.zeros((m,1))
     max_product = 1
     for i in range(m):
-        max_ks[i] = np.floor(limit/u[i])
-        max_product = max_product * max_ks[i]
-    A_i_ki = jax.jit(jax.tree_util.Partial(A_n_u_T_i_ki,A,n,u,T))
+        max_k[i] = np.floor(limit/u[i])
+        max_product = max_product * max_k[i]
+    A_i_ki = jax.jit(jax.tree_util.Partial(A_n_u_T_i_k,A,n,u,T))
     A_k = jax.jit(jax.tree_util.Partial(A_n_u_T_k,A,n,u,T))
     pass
 
 @jax.jit
-def A_n_u_T_i_ki(A,n,u,T,i,ki):
-    return (A[i]*n[i] + ki*u[i]/T)/(n[i] + 1)
+def A_n_u_T_i_k(A,n,u,T,i,k):
+    return (A[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
 
 @jax.jit
 def A_n_u_T_k(A,n,u,T,k):
     m = A.shape[0]
     result = 0
     for i in range(m):
-        result = result + A_n_u_T_i_ki(A,n,u,T,i,k[i])
+        result = result + A_n_u_T_i_k(A,n,u,T,i,k)
     result = result/m
     return result

@@ -124,7 +124,7 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
     n = jnp.array(shadow_transactions['num_transactions'])
     u = jnp.array(shadow_transactions['current_price'])
     m = jnp.array(shadow_transactions['num_stocks']) 
-    # Let k[i] be the number of shares for stock i
+    # k[i] = new number of shares for stock i
     max_k = np.zeros((m,1))
     for i in range(m):
         max_k[i] = np.floor(limit/u[i])
@@ -144,3 +144,13 @@ def Average_A_n_u_T_k(A,n,u,T,k):
         result = result + A_n_u_T_k_i(A,n,u,T,k,i)
     result = result/m
     return result
+
+@jax.jit
+def Variance_A_n_u_T_k(A,n,u,T,k):
+    average = Average_A_n_u_T_k(A,n,u,T,k)
+    m = A.shape[0]
+    variance = 0
+    for i in range(m):
+        variance = variance + (A_n_u_T_k_i(A,n,u,T,k,i) - average)^2
+    variance = variance/m
+    return variance

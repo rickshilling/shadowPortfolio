@@ -129,7 +129,7 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
     for i in range(m):
         max_k[i] = np.floor(limit/u[i])
     A_k_i = jax.jit(jax.tree_util.Partial(A_n_u_T_k_i,A,n,u,T))
-    Average_A_k = jax.jit(jax.tree_util.Partial(Average_A_n_u_T_k,A,n,u,T))
+    average_A_k = jax.jit(jax.tree_util.Partial(average_A_n_u_T_k,A,n,u,T))
     pass
 
 @jax.jit
@@ -137,7 +137,7 @@ def A_n_u_T_k_i(A,n,u,T,k,i):
     return (A[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
 
 @jax.jit
-def Average_A_n_u_T_k(A,n,u,T,k):
+def average_A_n_u_T_k(A,n,u,T,k):
     m = A.shape[0]
     result = 0
     for i in range(m):
@@ -146,8 +146,8 @@ def Average_A_n_u_T_k(A,n,u,T,k):
     return result
 
 @jax.jit
-def Variance_A_n_u_T_k(A,n,u,T,k):
-    average = Average_A_n_u_T_k(A,n,u,T,k)
+def variance_A_n_u_T_k(A,n,u,T,k):
+    average = average_A_n_u_T_k(A,n,u,T,k)
     m = A.shape[0]
     variance = 0
     for i in range(m):

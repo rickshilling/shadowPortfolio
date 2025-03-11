@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
-import jax.numpy as jnp
 from datetime import datetime
 from datetime import date
+import jax
+import jax.numpy as jnp
 import copy
 
 def update_transactions(old_transactions:pd.DataFrame,
@@ -108,20 +109,34 @@ def refactor_shadow_transactions(shadow_transactions):
         else:
             error_string = 'Error: ' + str(stock_index) + ' does not have a key in shadow transactions'
             print(error_string)
+    shadow_transactions['tickers'] = list(shadow_transactions.keys())
     shadow_transactions['current_price'] = current_price
     shadow_transactions['num_transactions'] = num_transactions
     shadow_transactions['prices'] = prices
     shadow_transactions['delta_times'] = delta_times
     shadow_transactions['average_price_per_time'] = average_price_per_time
     shadow_transactions['order'] = order
+    shadow_transactions['num_stocks'] = len(num_transactions)
     return shadow_transactions
 
-def arg_min_variance(shadow_transactions, T, constraint = 27*7):
-    A = shadow_transactions['average_price_per_time']
-    n = shadow_transactions['num_transactions']
-    m = len(n)
-    u = shadow_transactions['current_price']
-    max_k = np.zeros((m,1))
+def arg_min_variance(shadow_transactions, T, limit = 27*7):
+    A = jnp.array(shadow_transactions['average_price_per_time'])
+    n = jnp.array(shadow_transactions['num_transactions'])
+    m = jnp.array(shadow_transactions['num_stocks']) 
+    u = jnp.array(shadow_transactions['current_price'])
+    # Let k_j be the number of shares for stock j
+    # let k = [k_1, k_2, ..., k_m]
+    max_k_j = np.zeros((m,1))
+    max_k = 1
     for ii in range(m):
-        max_k[ii] = np.floor(constraint/u[ii])
-    A_j = lambda j, k : (A[j]*n[j] + k*u[j]/T)/(n[j] + 1) 
+        max_k_j[ii] = np.floor(limit/u[ii])
+        max_k = max_k * max_k_j[ii]
+    a = A_fn(A,n,u,T,0,2)
+    A_fn_partial = jax.partial(A_fn,A,n,u,T)
+    aa = A_fn_partial(0,2)
+    pass
+
+@jax.jit
+def A_fn(A,n,u,T,j,k):
+    result = (A[j]*n[j] + k*u[j]/T)/(n[j] + 1)
+    return result

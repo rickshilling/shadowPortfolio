@@ -5,6 +5,7 @@ from datetime import date
 import jax
 import jax.numpy as jnp
 import copy
+import optax
 
 def update_transactions(old_transactions:pd.DataFrame,
                         add_transactions:pd.DataFrame,
@@ -86,7 +87,7 @@ def refactor_shadow_transactions(shadow_transactions):
     for ticker in shadow_transactions.keys():
         max_num_transactions = np.maximum(max_num_transactions,shadow_transactions[ticker]['num_transactions'])
     current_price = np.zeros((num_stocks,1))
-    num_transactions = np.zeros((num_stocks,), dtype=int)
+    num_transactions = np.zeros((num_stocks,1), dtype=int)
     prices = np.zeros((num_stocks,max_num_transactions))
     delta_times = np.zeros((num_stocks,max_num_transactions))
     average_price_per_time = np.zeros((num_stocks,1))
@@ -100,8 +101,8 @@ def refactor_shadow_transactions(shadow_transactions):
                 break
         if found:
             current_price[stock_index] = shadow_transactions[key]['current_price']
-            num_transactions[stock_index] = shadow_transactions[key]['num_transactions']
-            current_num_transactions = num_transactions[stock_index]
+            num_transactions[stock_index][0] = shadow_transactions[key]['num_transactions']
+            current_num_transactions = num_transactions[stock_index][0]
             prices[stock_index][0:current_num_transactions] = shadow_transactions[key]['prices'] 
             delta_times[stock_index][0:current_num_transactions] = shadow_transactions[key]['delta_times'] 
             average_price_per_time[stock_index] = shadow_transactions[key]['average_price_per_time']
@@ -120,41 +121,65 @@ def refactor_shadow_transactions(shadow_transactions):
     return shadow_transactions
 
 def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
-    A = jnp.array(shadow_transactions['average_price_per_time'])
+    a = jnp.array(shadow_transactions['average_price_per_time'])
     n = jnp.array(shadow_transactions['num_transactions'])
     u = jnp.array(shadow_transactions['current_price'])
-    m = jnp.array(shadow_transactions['num_stocks']) 
+    m = shadow_transactions['num_stocks'] 
     # k[i] = new number of shares for stock i
     max_k = np.zeros((m,1))
     for i in range(m):
         max_k[i] = np.floor(limit/u[i])
-    A_k_i = jax.jit(jax.tree_util.Partial(A_n_u_T_k_i,A,n,u,T))
-    average_A_k = jax.jit(jax.tree_util.Partial(average_A_n_u_T_k,A,n,u,T))
-    variance_A_k = jax.jit(jax.tree_util.Partial(variance_A_n_u_T_k,A,n,u,T))
+    a_k_i = jax.jit(jax.tree_util.Partial(a_n_u_T_k_i,a,n,u,T))
+    average_a_k = jax.jit(jax.tree_util.Partial(average_a_n_u_T_k,a,n,u,T))
+    variance_a_k = jax.jit(jax.tree_util.Partial(variance_a_n_u_T_k,a,n,u,T))
+    average = jnp.sum( (a*n + max_k*u)/(n+1) )/m
+
     pass
 
 @jax.jit
-def A_n_u_T_k_i(A,n,u,T,k,i):
-    # A_n_u_T_k_i(A,n,u,T,k,i): Average price owned per time for stock i if
+def a_n_u_T_k_i(a,n,u,T,k,i):
+    # Average price owned per time for stock i if
     # k[i] units are added at unit price u[i] & owned for T time units  
-    return (A[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
+    return (a[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
 
 @jax.jit
-def average_A_n_u_T_k(A,n,u,T,k):
-    # average_A_n_u_T_k(A,n,u,T,k): Average of Average price owned per time over all stocks 
-    m = A.shape[0]
+def average_a_n_u_T_k(a,n,u,T,k):
+    # Average of Average price owned per time over all stocks 
+    m = a.shape[0]
     result = 0
     for i in range(m):
-        result = result + A_n_u_T_k_i(A,n,u,T,k,i)
+        result = result + a_n_u_T_k_i(A,n,u,T,k,i)
     result = result/m
     return result
 
 @jax.jit
-def variance_A_n_u_T_k(A,n,u,T,k):
-    average = average_A_n_u_T_k(A,n,u,T,k)
-    m = A.shape[0]
+def variance_a_n_u_T_k(a,n,u,T,k):
+    average = average_a_n_u_T_k(a,n,u,T,k)
+    m = a.shape[0]
     variance = 0
     for i in range(m):
-        variance = variance + (A_n_u_T_k_i(A,n,u,T,k,i) - average)**2
+        variance = variance + (a_n_u_T_k_i(a,n,u,T,k,i) - average)**2
     variance = variance/m
     return variance
+
+# def model(params, x):
+#     return params["w"] * x + params["b"]
+
+# def loss_fn(params, x, y):
+#     predictions = model(params, x)
+#     return jnp.mean((predictions - y) ** 2)
+
+def model(params, k):
+    # return (A[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
+    # return params["w"] * x + params["b"]
+    A = params["A"]
+    n = params["n"]
+    u = params["u"]
+    T = params["T"]
+    m = A.shape[0]
+    # average = 0
+    # for i in range(m):
+    #     average = average + (A[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
+    # average = average/m
+
+    average = jnp.sum( (A*n + k*u/T)/(n+1) )/m

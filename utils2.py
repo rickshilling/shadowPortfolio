@@ -121,20 +121,49 @@ def refactor_shadow_transactions(shadow_transactions):
     return shadow_transactions
 
 def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
-    a = jnp.array(shadow_transactions['average_price_per_time'])
-    n = jnp.array(shadow_transactions['num_transactions'])
-    u = jnp.array(shadow_transactions['current_price'])
-    m = shadow_transactions['num_stocks'] 
     # k[i] = new number of shares for stock i
-    max_k = np.zeros((m,1))
-    for i in range(m):
-        max_k[i] = np.floor(limit/u[i])
-    a_k_i = jax.jit(jax.tree_util.Partial(a_n_u_T_k_i,a,n,u,T))
-    average_a_k = jax.jit(jax.tree_util.Partial(average_a_n_u_T_k,a,n,u,T))
-    variance_a_k = jax.jit(jax.tree_util.Partial(variance_a_n_u_T_k,a,n,u,T))
-    average = jnp.sum( (a*n + max_k*u)/(n+1) )/m
+    x = {"a": jnp.array(shadow_transactions['average_price_per_time']), 
+         "n": jnp.array(shadow_transactions['num_transactions']),
+         "u": jnp.array(shadow_transactions['current_price']),
+         "m": shadow_transactions['num_stocks'],
+         "l": limit,
+         "T": T}
+    max_k = jnp.floor(limit/x["u"])
+    params = {"k":max_k}
+    num_iterations = 1000
+    start_learning_rate = 1e-2
+    optimizer = optax.adam(start_learning_rate)
+    opt_state = optimizer.init(params)
+    for _ in range(num_iterations):
+        grads = jax.grad(loss)(params, x)
+        updates, opt_state = optimizer.update(grads, opt_state)
+        params = optax.apply_updates(params, updates)
+    print("Learned parameters:", params)
+    
+def model(params, x):
+    a=x["a"]
+    n=x["n"]
+    u=x["u"]
+    m=x["m"]
+    T=x["T"]
+    k=params["k"]
+    averages = (a*n + k*u/T)/(n+1)
+    return averages
 
-    pass
+def loss(params, x):
+    averages = model(params, x)
+    k=params["k"]
+    u=x["u"]
+    l=x["l"]
+    loss = jnp.var(averages) + (l - jnp.dot(k,u))**2
+    return loss
+
+@jax.jit
+def update(params, opt_state, optimizer, k):
+    loss, grads = jax.value_and_grad(loss_fn)(params, k) # compute loss and gradients
+    updates, opt_state = optimizer.update(grads, opt_state, params) # compute updates
+    params = optax.apply_updates(params, updates) # apply updates to parameters
+    return params, opt_state, loss
 
 @jax.jit
 def a_n_u_T_k_i(a,n,u,T,k,i):
@@ -148,7 +177,7 @@ def average_a_n_u_T_k(a,n,u,T,k):
     m = a.shape[0]
     result = 0
     for i in range(m):
-        result = result + a_n_u_T_k_i(A,n,u,T,k,i)
+        result = result + a_n_u_T_k_i(a,n,u,T,k,i)
     result = result/m
     return result
 
@@ -161,25 +190,3 @@ def variance_a_n_u_T_k(a,n,u,T,k):
         variance = variance + (a_n_u_T_k_i(a,n,u,T,k,i) - average)**2
     variance = variance/m
     return variance
-
-# def model(params, x):
-#     return params["w"] * x + params["b"]
-
-# def loss_fn(params, x, y):
-#     predictions = model(params, x)
-#     return jnp.mean((predictions - y) ** 2)
-
-def model(params, k):
-    # return (A[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
-    # return params["w"] * x + params["b"]
-    A = params["A"]
-    n = params["n"]
-    u = params["u"]
-    T = params["T"]
-    m = A.shape[0]
-    # average = 0
-    # for i in range(m):
-    #     average = average + (A[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
-    # average = average/m
-
-    average = jnp.sum( (A*n + k*u/T)/(n+1) )/m

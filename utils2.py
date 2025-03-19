@@ -128,9 +128,9 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
          "m": shadow_transactions['num_stocks'],
          "l": limit,
          "T": T}
-    max_k = jnp.floor(limit/x["u"])
+    max_k = jnp.array(jnp.floor(limit/x["u"]))
     params = {"k":max_k}
-    num_iterations = 1000
+    num_iterations = 10000
     start_learning_rate = 1e-2
     optimizer = optax.adam(start_learning_rate)
     opt_state = optimizer.init(params)
@@ -138,7 +138,11 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
         grads = jax.grad(loss)(params, x)
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
+        amount = jnp.dot(jnp.squeeze(params["k"]),jnp.squeeze(x["u"]))
+        # print(params)
+        print(amount)
     print("Learned parameters:", params)
+    return params["k"], x["u"]
     
 def model(params, x):
     a=x["a"]
@@ -152,9 +156,9 @@ def model(params, x):
 
 def loss(params, x):
     averages = model(params, x)
-    k=params["k"]
-    u=x["u"]
-    l=x["l"]
+    k=jnp.squeeze(params["k"])
+    l=jnp.squeeze(x["l"])
+    u=jnp.squeeze(x["u"])
     loss = jnp.var(averages) + (l - jnp.dot(k,u))**2
     return loss
 

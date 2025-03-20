@@ -120,7 +120,7 @@ def refactor_shadow_transactions(shadow_transactions):
     shadow_transactions['num_stocks'] = len(num_transactions)
     return shadow_transactions
 
-def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
+def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 1000):
     # k[i] = new number of shares for stock i
     x = {"a": jnp.array(shadow_transactions['average_price_per_time']), 
          "n": jnp.array(shadow_transactions['num_transactions']),
@@ -128,20 +128,28 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7):
          "m": shadow_transactions['num_stocks'],
          "l": limit,
          "T": T}
-    max_k = jnp.array(jnp.floor(limit/x["u"]))
+    max_k = jnp.array(jnp.ceil(limit/x["u"]))
     params = {"k":max_k}
-    num_iterations = 10000
     start_learning_rate = 1e-2
     optimizer = optax.adam(start_learning_rate)
     opt_state = optimizer.init(params)
-    for _ in range(num_iterations):
-        grads = jax.grad(loss)(params, x)
+    for iteration in range(num_iterations):
+        current_loss, grads = jax.value_and_grad(loss)(params, x)
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
         amount = jnp.dot(jnp.squeeze(params["k"]),jnp.squeeze(x["u"]))
         # print(params)
-        print(amount)
-    print("Learned parameters:", params)
+        if jnp.mod(iteration, 500)==0:
+            # print(amount)
+            # horizontal_string = np.array2string(params["k"], separator=', ', max_line_width=np.inf)
+            float_list = jnp.squeeze(params["k"]).tolist()
+            int_parameters = [int(x) for x in float_list]
+            print(int_parameters)
+            averages = model(params,x)
+            # print(current_loss)
+    float_list = jnp.squeeze(params["k"]).tolist()
+    int_parameters = [int(x) for x in float_list]
+    print("Learned parameters:", int_parameters)
     return params["k"], x["u"]
     
 def model(params, x):
@@ -159,7 +167,9 @@ def loss(params, x):
     k=jnp.squeeze(params["k"])
     l=jnp.squeeze(x["l"])
     u=jnp.squeeze(x["u"])
-    loss = jnp.var(averages) + (l - jnp.dot(k,u))**2
+    penalty_factor = 1.0e5
+    negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
+    loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + negative_penalty
     return loss
 
 @jax.jit

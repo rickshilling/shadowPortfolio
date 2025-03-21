@@ -133,24 +133,27 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 10
     start_learning_rate = 1e-2
     optimizer = optax.adam(start_learning_rate)
     opt_state = optimizer.init(params)
+    losses = []
+    amounts = []
     for iteration in range(num_iterations):
         current_loss, grads = jax.value_and_grad(loss)(params, x)
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
         amount = jnp.dot(jnp.squeeze(params["k"]),jnp.squeeze(x["u"]))
-        # print(params)
+        losses.append(current_loss)
+        amounts.append(amount)
         if jnp.mod(iteration, 500)==0:
-            # print(amount)
-            # horizontal_string = np.array2string(params["k"], separator=', ', max_line_width=np.inf)
             float_list = jnp.squeeze(params["k"]).tolist()
             int_parameters = [int(x) for x in float_list]
-            print(int_parameters)
-            averages = model(params,x)
-            # print(current_loss)
+            print((current_loss.item(), int_parameters))
     float_list = jnp.squeeze(params["k"]).tolist()
     int_parameters = [int(x) for x in float_list]
     print("Learned parameters:", int_parameters)
-    return params["k"], x["u"]
+    new_average_price_per_time = model(params,x)
+    shadow_transactions["new_shares"] = params["k"]
+    shadow_transactions["new_average_price_per_time"] = new_average_price_per_time
+    shadow_transactions["new_amount"] = amount
+    return shadow_transactions, losses
     
 def model(params, x):
     a=x["a"]
@@ -171,36 +174,3 @@ def loss(params, x):
     negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
     loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + negative_penalty
     return loss
-
-@jax.jit
-def update(params, opt_state, optimizer, k):
-    loss, grads = jax.value_and_grad(loss_fn)(params, k) # compute loss and gradients
-    updates, opt_state = optimizer.update(grads, opt_state, params) # compute updates
-    params = optax.apply_updates(params, updates) # apply updates to parameters
-    return params, opt_state, loss
-
-@jax.jit
-def a_n_u_T_k_i(a,n,u,T,k,i):
-    # Average price owned per time for stock i if
-    # k[i] units are added at unit price u[i] & owned for T time units  
-    return (a[i]*n[i] + k[i]*u[i]/T)/(n[i] + 1)
-
-@jax.jit
-def average_a_n_u_T_k(a,n,u,T,k):
-    # Average of Average price owned per time over all stocks 
-    m = a.shape[0]
-    result = 0
-    for i in range(m):
-        result = result + a_n_u_T_k_i(a,n,u,T,k,i)
-    result = result/m
-    return result
-
-@jax.jit
-def variance_a_n_u_T_k(a,n,u,T,k):
-    average = average_a_n_u_T_k(a,n,u,T,k)
-    m = a.shape[0]
-    variance = 0
-    for i in range(m):
-        variance = variance + (a_n_u_T_k_i(a,n,u,T,k,i) - average)**2
-    variance = variance/m
-    return variance

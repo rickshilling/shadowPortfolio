@@ -148,7 +148,7 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 10
             print((current_loss.item(), int_parameters))
     float_list = jnp.squeeze(params["k"]).tolist()
     int_parameters = [int(x) for x in float_list]
-    print("Learned parameters:", int_parameters)
+    print("Learned parameters:", float_list)
     new_average_price_per_time = model(params,x)
     shadow_transactions["new_shares"] = params["k"]
     shadow_transactions["new_average_price_per_time"] = new_average_price_per_time
@@ -162,7 +162,21 @@ def model(params, x):
     m=x["m"]
     T=x["T"]
     k=params["k"]
-    averages = (a*n + k*u/T)/(n+1)
+    threshold = 0.5
+    positive_indices = jnp.where(k>=threshold)
+    negative_indices = jnp.where(k<threshold)
+    ap = a[positive_indices]
+    np = n[positive_indices]
+    kp = k[positive_indices]
+    up = u[positive_indices]
+    np = n[positive_indices]
+
+    positive_averages = (ap*np + kp*up/T)/(np+1)
+    negative_averages = a[negative_indices]
+    averages = jnp.zeros_like(a)
+    averages = averages.at[positive_indices].set(positive_averages)
+    averages = averages.at[negative_indices].set(negative_averages)
+    # averages = (a*n + k*u/T)/(n+1)
     return averages
 
 def loss(params, x):
@@ -170,6 +184,9 @@ def loss(params, x):
     k=jnp.squeeze(params["k"])
     l=jnp.squeeze(x["l"])
     u=jnp.squeeze(x["u"])
+    # penalty_factor = 1.0e5
+    # negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
+    # loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + negative_penalty
     penalty_factor = 1.0e5
     negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
     loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + negative_penalty

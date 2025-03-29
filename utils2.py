@@ -1,11 +1,5 @@
 import numpy as np
 import pandas as pd
-from datetime import datetime
-from datetime import date
-import jax
-import jax.numpy as jnp
-import copy
-import optax
 
 def update_transactions(old_transactions:pd.DataFrame,
                         add_transactions:pd.DataFrame,
@@ -74,14 +68,18 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
             average_price_per_time = -price_paid_per_time/len(prices)
         shadow_transactions[shadow_ticker] = dict()
         shadow_transactions[shadow_ticker]['current_price'] = shadow_row['CurrentPrice($)']
+        shadow_transactions[shadow_ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']
+        shadow_transactions[shadow_ticker]['Rel PriceStrgth(%)'] = shadow_row['Rel PriceStrgth(%)']
         shadow_transactions[shadow_ticker]['num_transactions'] = len(delta_times)
         shadow_transactions[shadow_ticker]['prices'] = prices
         shadow_transactions[shadow_ticker]['delta_times'] = delta_times
         shadow_transactions[shadow_ticker]['average_price_per_time'] = average_price_per_time
         shadow_transactions[shadow_ticker]['index'] = shadow_index
+        shadow_transactions[shadow_ticker]['Notes'] = str(shadow_row['Notes'])
+    shadow_transactions = refactor_shadow_transactions(shadow_transactions)
     return shadow_transactions
 
-def refactor_shadow_transactions(shadow_transactions):
+def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
     max_num_transactions = 0
     num_stocks = len(shadow_transactions.keys())
     for ticker in shadow_transactions.keys():
@@ -91,7 +89,10 @@ def refactor_shadow_transactions(shadow_transactions):
     prices = np.zeros((num_stocks,max_num_transactions))
     delta_times = np.zeros((num_stocks,max_num_transactions))
     average_price_per_time = np.zeros((num_stocks,1))
+    PEs = np.zeros((num_stocks,1))
     order = dict()
+    Notes = dict()
+    Rel_PriceStrgth = dict()
     for stock_index in range(num_stocks):
         found = False
         for ticker in shadow_transactions.keys():
@@ -106,7 +107,13 @@ def refactor_shadow_transactions(shadow_transactions):
             prices[stock_index][0:current_num_transactions] = shadow_transactions[key]['prices'] 
             delta_times[stock_index][0:current_num_transactions] = shadow_transactions[key]['delta_times'] 
             average_price_per_time[stock_index] = shadow_transactions[key]['average_price_per_time']
+            if shadow_transactions[key]['Price-EarningsRatio(X)'] == 'nmf':
+                PEs[stock_index] = nmf_number
+            else:
+                PEs[stock_index] = shadow_transactions[key]['Price-EarningsRatio(X)']
             order[stock_index] = key
+            Notes[stock_index] = shadow_transactions[key]['Notes']
+            Rel_PriceStrgth[stock_index] = shadow_transactions[key]['Rel PriceStrgth(%)']
         else:
             error_string = 'Error: ' + str(stock_index) + ' does not have a key in shadow transactions'
             print(error_string)
@@ -116,78 +123,9 @@ def refactor_shadow_transactions(shadow_transactions):
     shadow_transactions['prices'] = prices
     shadow_transactions['delta_times'] = delta_times
     shadow_transactions['average_price_per_time'] = average_price_per_time
+    shadow_transactions['Price-EarningsRatio(X)'] = PEs
     shadow_transactions['order'] = order
     shadow_transactions['num_stocks'] = len(num_transactions)
+    shadow_transactions['Notes'] = Notes
+    shadow_transactions['Rel PriceStrgth(%)'] = Rel_PriceStrgth
     return shadow_transactions
-
-def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 1000):
-    # k[i] = new number of shares for stock i
-    x = {"a": jnp.array(shadow_transactions['average_price_per_time']), 
-         "n": jnp.array(shadow_transactions['num_transactions']),
-         "u": jnp.array(shadow_transactions['current_price']),
-         "m": shadow_transactions['num_stocks'],
-         "l": limit,
-         "T": T}
-    max_k = jnp.array(jnp.ceil(limit/x["u"]))
-    params = {"k":max_k}
-    start_learning_rate = 1e-2
-    optimizer = optax.adam(start_learning_rate)
-    opt_state = optimizer.init(params)
-    losses = []
-    amounts = []
-    for iteration in range(num_iterations):
-        current_loss, grads = jax.value_and_grad(loss)(params, x)
-        updates, opt_state = optimizer.update(grads, opt_state)
-        params = optax.apply_updates(params, updates)
-        amount = jnp.dot(jnp.squeeze(params["k"]),jnp.squeeze(x["u"]))
-        losses.append(current_loss)
-        amounts.append(amount)
-        if jnp.mod(iteration, 500)==0:
-            float_list = jnp.squeeze(params["k"]).tolist()
-            int_parameters = [int(x) for x in float_list]
-            print((current_loss.item(), int_parameters))
-    float_list = jnp.squeeze(params["k"]).tolist()
-    int_parameters = [int(x) for x in float_list]
-    print("Learned parameters:", float_list)
-    new_average_price_per_time = model(params,x)
-    shadow_transactions["new_shares"] = params["k"]
-    shadow_transactions["new_average_price_per_time"] = new_average_price_per_time
-    shadow_transactions["new_amount"] = amount
-    return shadow_transactions, losses
-    
-def model(params, x):
-    a=x["a"]
-    n=x["n"]
-    u=x["u"]
-    m=x["m"]
-    T=x["T"]
-    k=params["k"]
-    threshold = 0.5
-    positive_indices = jnp.where(k>=threshold)
-    negative_indices = jnp.where(k<threshold)
-    ap = a[positive_indices]
-    np = n[positive_indices]
-    kp = k[positive_indices]
-    up = u[positive_indices]
-    np = n[positive_indices]
-
-    positive_averages = (ap*np + kp*up/T)/(np+1)
-    negative_averages = a[negative_indices]
-    averages = jnp.zeros_like(a)
-    averages = averages.at[positive_indices].set(positive_averages)
-    averages = averages.at[negative_indices].set(negative_averages)
-    # averages = (a*n + k*u/T)/(n+1)
-    return averages
-
-def loss(params, x):
-    averages = model(params, x)
-    k=jnp.squeeze(params["k"])
-    l=jnp.squeeze(x["l"])
-    u=jnp.squeeze(x["u"])
-    # penalty_factor = 1.0e5
-    # negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
-    # loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + negative_penalty
-    penalty_factor = 1.0e5
-    negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
-    loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + negative_penalty
-    return loss

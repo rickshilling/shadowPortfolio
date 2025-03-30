@@ -13,12 +13,14 @@ def set_weights(shadow_transactions):
             weights[stock_index] = 1/shadow_transactions['Rel PriceStrgth(%)'][stock_index]
         else:
             penalty_indices.append(stock_index)
-    # weights = jax.nn.softmax(weights)
     penalty_weight = 10*jnp.max(weights)
     # a < b, var(acx) = var(bdx) => 
     #           (ac)^2var(x)= (bd)^2var(x)
-    #           a/b < 1 = ac^2/bd^2 => a/b < ac^2/bd^2
-    #           1 < c^2/d^2 => d^2 < c^2 => d < c =>
+    #           a/b < 1 = ac^2/bd^2 
+    #           a/b < ac^2/bd^2
+    #           1 < c^2/d^2 
+    #           d^2 < c^2 
+    #           d < c 
     #           c > d
     for stock_index in penalty_indices:
         weights[stock_index] = penalty_weight
@@ -49,7 +51,7 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 10
         amount = jnp.dot(jnp.squeeze(params["k"]),jnp.squeeze(x["u"]))
         losses.append(current_loss)
         amounts.append(amount)
-        if jnp.mod(iteration, 500)==0:
+        if jnp.mod(iteration, 1000)==0:
             float_list = jnp.squeeze(params["k"]).tolist()
             int_parameters = [int(x) for x in float_list]
             print((current_loss.item(), int_parameters))
@@ -94,10 +96,10 @@ def loss(params, x):
     k=jnp.squeeze(params["k"])
     l=jnp.squeeze(x["l"])
     u=jnp.squeeze(x["u"])
-    # penalty_factor = 1.0e5
-    # negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
-    # loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + negative_penalty
     penalty_factor = 1.0e5
     negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
     loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + negative_penalty
+    # mean_averages = jnp.mean(averages)
+    # residual = averages - mean_averages
+    # loss =  jnp.mean((residual)**2) + (l - jnp.dot(k,u))**2 + negative_penalty
     return loss

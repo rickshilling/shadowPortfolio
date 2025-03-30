@@ -13,7 +13,8 @@ def set_weights(shadow_transactions):
             weights[stock_index] = 1/shadow_transactions['Rel PriceStrgth(%)'][stock_index]
         else:
             penalty_indices.append(stock_index)
-    penalty_weight = jnp.max(weights)
+    # weights = jax.nn.softmax(weights)
+    penalty_weight = 10*jnp.max(weights)
     # a < b, var(acx) = var(bdx) => 
     #           (ac)^2var(x)= (bd)^2var(x)
     #           a/b < 1 = ac^2/bd^2 => a/b < ac^2/bd^2
@@ -67,6 +68,7 @@ def model(params, x):
     u=x["u"]
     m=x["m"]
     T=x["T"]
+    w=x["w"]
     k=params["k"]
     threshold = 0.5
     positive_indices = jnp.where(k>=threshold)
@@ -76,8 +78,10 @@ def model(params, x):
     kp = k[positive_indices]
     up = u[positive_indices]
     np = n[positive_indices]
+    wp = w[positive_indices]
 
-    positive_averages = (ap*np + kp*up/T)/(np+1)
+    positive_averages = (ap*np + wp*kp*up/T)/(np+1)
+    # positive_averages = (ap*np + kp*up/T)/(np+1)
     negative_averages = a[negative_indices]
     averages = jnp.zeros_like(a)
     averages = averages.at[positive_indices].set(positive_averages)

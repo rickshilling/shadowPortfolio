@@ -96,9 +96,14 @@ def loss(params, x):
     k=jnp.squeeze(params["k"])
     l=jnp.squeeze(x["l"])
     u=jnp.squeeze(x["u"])
-    penalty_factor = 1.0e5
-    negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
-    loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + negative_penalty
+    
+    # penalty_factor = 1.0e5
+    # negative_penalty = penalty_factor * jnp.mean(jnp.maximum(0, -k)**2)
+
+    tau = 1e-1
+    negative_penalty = jnp.exp(-k/tau)
+
+    loss = jnp.var(averages) + (l - jnp.dot(k,u))**2 + jnp.sum(negative_penalty)
     # mean_averages = jnp.mean(averages)
     # residual = averages - mean_averages
     # loss =  jnp.mean((residual)**2) + (l - jnp.dot(k,u))**2 + negative_penalty

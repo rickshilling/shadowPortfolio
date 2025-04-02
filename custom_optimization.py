@@ -32,7 +32,7 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 10
     # k[i] = new number of shares for stock i
     x = {"a": jnp.array(shadow_transactions['average_price_per_time']), 
          "n": jnp.array(shadow_transactions['num_transactions']),
-         "u": jnp.array(shadow_transactions['current_price']),
+         "u": jnp.array(shadow_transactions['current_prices']),
          "m": shadow_transactions['num_stocks'],
          "l": limit,
          "T": T,

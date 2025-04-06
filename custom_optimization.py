@@ -5,25 +5,25 @@ import numpy as np
 
 def set_weights(shadow_transactions):
     num_stocks = shadow_transactions['num_stocks']
-    weights = np.zeros((num_stocks,1))
-    penalty_indices = []
-    for stock_index in range(num_stocks):
-        note = shadow_transactions['Notes'][stock_index]
-        if ("Earnings probation" not in note) and ("Exceeds" not in note):
-            weights[stock_index] = 1/shadow_transactions['Rel PriceStrgth(%)'][stock_index]
-        else:
-            penalty_indices.append(stock_index)
-    penalty_weight = 10*jnp.max(weights)
-    # a < b, var(acx) = var(bdx) => 
-    #           (ac)^2var(x)= (bd)^2var(x)
-    #           a/b < 1 = ac^2/bd^2 
-    #           a/b < ac^2/bd^2
-    #           1 < c^2/d^2 
-    #           d^2 < c^2 
-    #           d < c 
-    #           c > d
-    for stock_index in penalty_indices:
-        weights[stock_index] = penalty_weight
+    weights = np.ones((num_stocks,1))
+    # penalty_indices = []
+    # for stock_index in range(num_stocks):
+    #     note = shadow_transactions['Notes'][stock_index]
+    #     if ("Earnings probation" not in note) and ("Exceeds" not in note):
+    #         weights[stock_index] = 1/shadow_transactions['Rel PriceStrgth(%)'][stock_index]
+    #     else:
+    #         penalty_indices.append(stock_index)
+    # penalty_weight = 10*jnp.max(weights)
+    # # a < b, var(acx) = var(bdx) => 
+    # #           (ac)^2var(x)= (bd)^2var(x)
+    # #           a/b < 1 = ac^2/bd^2 
+    # #           a/b < ac^2/bd^2
+    # #           1 < c^2/d^2 
+    # #           d^2 < c^2 
+    # #           d < c 
+    # #           c > d
+    # for stock_index in penalty_indices:
+    #     weights[stock_index] = penalty_weight
     shadow_transactions['weights'] = weights
     return shadow_transactions
 

@@ -82,8 +82,8 @@ def model(params, x):
     np = n[positive_indices]
     wp = w[positive_indices]
 
-    positive_averages = (ap*np + wp*kp*up/T)/(np+1)
-    # positive_averages = (ap*np + kp*up/T)/(np+1)
+    # positive_averages = (ap*np + wp*kp*up/T)/(np+1)
+    positive_averages = (ap*np + kp*up/T)/(np+1)
     negative_averages = a[negative_indices]
     averages = jnp.zeros_like(a)
     averages = averages.at[positive_indices].set(positive_averages)

@@ -8,6 +8,8 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
         amounts = []
         delta_times = []
         quantities = []
+        total_cost_basis = 0
+        total_sales = 0
         for _, transaction_row in transactions.iterrows():
             if shadow_ticker == transaction_row['Symbol'] or shadow_ticker == transaction_row['TransactionType']:
                 TransactionDate = transaction_row['TransactionDate'].to_pydatetime().date()
@@ -15,6 +17,10 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
                 amounts.append(transaction_row['Amount'])
                 delta_times.append(delta_time)
                 quantities.append(transaction_row['Quantity'])
+                if transaction_row['Quantity'] > 0:
+                    total_cost_basis = total_cost_basis + transaction_row['Amount']
+                else:
+                    total_sales = total_sales + transaction_row['Amount']
         current_quantity = np.sum(quantities)
         if delta_times == []:
             average_price_per_time = 0
@@ -36,6 +42,8 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
         shadow_transactions[shadow_ticker]['Notes'] = str(shadow_row['Notes'])
         shadow_transactions[shadow_ticker]['current_quantity'] = current_quantity
         shadow_transactions[shadow_ticker]['quantities'] = quantities
+        shadow_transactions[shadow_ticker]['total_cost_basis'] = total_cost_basis
+        shadow_transactions[shadow_ticker]['total_sales'] = total_sales
     shadow_transactions = refactor_shadow_transactions(shadow_transactions)
     return shadow_transactions
 
@@ -55,6 +63,8 @@ def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
     Rel_PriceStrgth = np.zeros((num_stocks,1))
     quantities = dict()
     current_quantities = np.zeros((num_stocks,1))
+    total_cost_basis = np.zeros((num_stocks,1))
+    total_sales = np.zeros((num_stocks,1))
     for stock_index in range(num_stocks):
         found = False
         for ticker in shadow_transactions.keys():
@@ -78,6 +88,8 @@ def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
             Rel_PriceStrgth[stock_index] = shadow_transactions[key]['Rel PriceStrgth(%)']
             current_quantities[stock_index] = shadow_transactions[key]['current_quantity']
             quantities[stock_index] = shadow_transactions[key]['quantities']
+            total_cost_basis[stock_index] = shadow_transactions[key]['total_cost_basis']
+            total_sales[stock_index] = shadow_transactions[key]['total_sales']
         else:
             error_string = 'Error: ' + str(stock_index) + ' does not have a key in shadow transactions'
             print(error_string)
@@ -96,4 +108,6 @@ def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
     new_shadow_transactions['current_quantities'] = current_quantities
     new_shadow_transactions['current_amounts'] = current_quantities * current_prices
     new_shadow_transactions['quantities'] = quantities
+    new_shadow_transactions['total_cost_basis'] = total_cost_basis
+    new_shadow_transactions['total_sales'] = total_sales
     return new_shadow_transactions

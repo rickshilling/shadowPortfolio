@@ -9,7 +9,7 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
         delta_times = []
         quantities = []
         for _, transaction_row in transactions.iterrows():
-            if shadow_ticker == transaction_row['Symbol']:
+            if shadow_ticker == transaction_row['Symbol'] or shadow_ticker == transaction_row['TransactionType']:
                 TransactionDate = transaction_row['TransactionDate'].to_pydatetime().date()
                 delta_time = (reference_date - TransactionDate).days
                 amounts.append(transaction_row['Amount'])

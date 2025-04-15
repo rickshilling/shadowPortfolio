@@ -10,7 +10,8 @@ def set_weights(shadow_transactions):
     # for stock_index in range(num_stocks):
     #     note = shadow_transactions['Notes'][stock_index]
     #     if ("Earnings probation" not in note) and ("Exceeds" not in note):
-    #         weights[stock_index] = 1/shadow_transactions['Rel PriceStrgth(%)'][stock_index]
+    #         weights[stock_index] = 1/shadow_transactions['current_prices'][stock_index]
+    #         # weights[stock_index] = 1/shadow_transactions['Rel PriceStrgth(%)'][stock_index]
     #     else:
     #         penalty_indices.append(stock_index)
     # penalty_weight = 10*jnp.max(weights)
@@ -38,6 +39,7 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 10
          "T": T,
          "w": jnp.array(shadow_transactions['weights'])}
     max_k = jnp.array(jnp.ceil(limit/x["u"]))
+    # max_k = jnp.zeros_like(x["u"])
     params = {"k":max_k}
     start_learning_rate = 1e-2
     optimizer = optax.adam(start_learning_rate)
@@ -82,8 +84,8 @@ def model(params, x):
     np = n[positive_indices]
     wp = w[positive_indices]
 
-    # positive_averages = (ap*np + wp*kp*up/T)/(np+1)
-    positive_averages = (ap*np + kp*up/T)/(np+1)
+    positive_averages = (ap*np + wp*kp*up/T)/(np+1)
+    # positive_averages = (ap*np + kp*up/T)/(np+1)
     negative_averages = a[negative_indices]
     averages = jnp.zeros_like(a)
     averages = averages.at[positive_indices].set(positive_averages)

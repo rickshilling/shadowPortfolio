@@ -30,6 +30,19 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
                 if delta_time > 0:
                     price_paid_per_time = price_paid_per_time + amount/delta_time
             average_price_per_time = -price_paid_per_time/len(amounts)
+        
+        if delta_times == []:
+            average_amount_per_time = 0
+        else:
+            time_differences = np.diff(delta_times)
+            time_differences = np.insert(time_differences, 0, delta_times[0])
+            cum_amounts = np.flip(np.cumsum(np.flip(amounts)))
+            time_amount_product = time_differences * cum_amounts
+            total_time_amount = np.sum(time_amount_product)
+            duration = delta_times[-1]
+            average_amount = total_time_amount / duration
+            average_amount_per_time = average_amount / duration
+
         shadow_transactions[shadow_ticker] = dict()
         shadow_transactions[shadow_ticker]['CurrentPrice($)'] = shadow_row['CurrentPrice($)']
         shadow_transactions[shadow_ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']
@@ -38,6 +51,7 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
         shadow_transactions[shadow_ticker]['amounts'] = amounts
         shadow_transactions[shadow_ticker]['delta_times'] = delta_times
         shadow_transactions[shadow_ticker]['average_price_per_time'] = average_price_per_time
+        # shadow_transactions[shadow_ticker]['average_price_per_time'] = average_amount_per_time
         shadow_transactions[shadow_ticker]['index'] = shadow_index
         shadow_transactions[shadow_ticker]['Notes'] = str(shadow_row['Notes'])
         shadow_transactions[shadow_ticker]['current_quantity'] = current_quantity

@@ -58,6 +58,9 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
         shadow_transactions[shadow_ticker]['quantities'] = quantities
         shadow_transactions[shadow_ticker]['total_cost_basis'] = total_cost_basis
         shadow_transactions[shadow_ticker]['total_sales'] = total_sales
+        shadow_transactions[shadow_ticker]['time_differences'] = time_differences
+        shadow_transactions[shadow_ticker]['cum_amounts'] = cum_amounts
+        shadow_transactions[shadow_ticker]['duration'] = duration
     shadow_transactions = refactor_shadow_transactions(shadow_transactions)
     return shadow_transactions
 
@@ -79,6 +82,9 @@ def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
     current_quantities = np.zeros((num_stocks,1))
     total_cost_basis = np.zeros((num_stocks,1))
     total_sales = np.zeros((num_stocks,1))
+    durations = np.zeros((num_stocks,1))
+    time_differences = dict()
+    cum_amounts = dict()
     for stock_index in range(num_stocks):
         found = False
         for ticker in shadow_transactions.keys():
@@ -104,6 +110,9 @@ def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
             quantities[stock_index] = shadow_transactions[key]['quantities']
             total_cost_basis[stock_index] = shadow_transactions[key]['total_cost_basis']
             total_sales[stock_index] = shadow_transactions[key]['total_sales']
+            time_differences[stock_index] = shadow_transactions[key]['time_differences']
+            cum_amounts[stock_index] = shadow_transactions[key]['cum_amounts']
+            durations[stock_index] = shadow_transactions[key]['duration']
         else:
             error_string = 'Error: ' + str(stock_index) + ' does not have a key in shadow transactions'
             print(error_string)
@@ -124,4 +133,7 @@ def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
     new_shadow_transactions['quantities'] = quantities
     new_shadow_transactions['total_cost_basis'] = total_cost_basis
     new_shadow_transactions['total_sales'] = total_sales
+    new_shadow_transactions['time_differences'] = time_differences
+    new_shadow_transactions['cum_amounts'] = cum_amounts
+    new_shadow_transactions['durations'] = durations
     return new_shadow_transactions

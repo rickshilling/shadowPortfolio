@@ -37,7 +37,10 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 10
          "m": shadow_transactions['num_stocks'],
          "l": limit,
          "T": T,
-         "w": jnp.array(shadow_transactions['weights'])}
+         "w": jnp.array(shadow_transactions['weights']),
+         'time_differences': shadow_transactions['time_differences'],
+         'cum_amounts': shadow_transactions['cum_amounts']
+        }
     max_k = jnp.array(jnp.ceil(limit/x["u"]))
     # max_k = jnp.zeros_like(x["u"])
     params = {"k":max_k}
@@ -73,6 +76,7 @@ def model(params, x):
     m=x["m"]
     T=x["T"]
     w=x["w"]
+    
     k=params["k"]
     threshold = 0.5
     positive_indices = jnp.where(k>=threshold)
@@ -91,6 +95,25 @@ def model(params, x):
     averages = averages.at[positive_indices].set(positive_averages)
     averages = averages.at[negative_indices].set(negative_averages)
     # averages = (a*n + k*u/T)/(n+1)
+    # return averages
+
+    time_differences = x['time_differences']
+    cum_amounts = x['cum_amounts']
+    durations = x['durations']
+    new_amounts = k*u
+    for i in range(m):
+        current_time_differences = time_differences[i]
+        current_cum_amounts = cum_amounts[i]
+        new_current_amount = np.insert(current_cum_amounts, 0, new_amounts[i])
+        new_time_current_difference = np.insert(current_time_differences, 0, T)
+        time_amount_product = new_time_current_difference * new_current_amount
+        total_time_amount = np.sum(time_amount_product)
+        duration = delta_times[-1]
+        average_amount = total_time_amount / duration
+        average_amount_per_time = average_amount / duration
+
+            
+
     return averages
 
 def loss(params, x):

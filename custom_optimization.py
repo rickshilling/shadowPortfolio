@@ -39,7 +39,8 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 10
          "T": T,
          "w": jnp.array(shadow_transactions['weights']),
          'time_differences': shadow_transactions['time_differences'],
-         'cum_amounts': shadow_transactions['cum_amounts']
+         'cum_amounts': shadow_transactions['cum_amounts'],
+         'duration': shadow_transactions['duration']
         }
     max_k = jnp.array(jnp.ceil(limit/x["u"]))
     # max_k = jnp.zeros_like(x["u"])
@@ -56,7 +57,7 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 10
         amount = jnp.dot(jnp.squeeze(params["k"]),jnp.squeeze(x["u"]))
         losses.append(current_loss)
         amounts.append(amount)
-        if jnp.mod(iteration, 1000)==0:
+        if jnp.mod(iteration, 100)==0:
             float_list = jnp.squeeze(params["k"]).tolist()
             int_parameters = [int(x) for x in float_list]
             print((current_loss.item(), int_parameters))
@@ -76,44 +77,47 @@ def model(params, x):
     m=x["m"]
     T=x["T"]
     w=x["w"]
-    
     k=params["k"]
-    threshold = 0.5
-    positive_indices = jnp.where(k>=threshold)
-    negative_indices = jnp.where(k<threshold)
-    ap = a[positive_indices]
-    np = n[positive_indices]
-    kp = k[positive_indices]
-    up = u[positive_indices]
-    np = n[positive_indices]
-    wp = w[positive_indices]
 
-    positive_averages = (ap*np + wp*kp*up/T)/(np+1)
-    # positive_averages = (ap*np + kp*up/T)/(np+1)
-    negative_averages = a[negative_indices]
-    averages = jnp.zeros_like(a)
-    averages = averages.at[positive_indices].set(positive_averages)
-    averages = averages.at[negative_indices].set(negative_averages)
+    # threshold = 0.5
+    # positive_indices = jnp.where(k>=threshold)
+    # negative_indices = jnp.where(k<threshold)
+    # ap = a[positive_indices]
+    # np = n[positive_indices]
+    # kp = k[positive_indices]
+    # up = u[positive_indices]
+    # np = n[positive_indices]
+    # wp = w[positive_indices]
+
+    # positive_averages = (ap*np + wp*kp*up/T)/(np+1)
+    # # positive_averages = (ap*np + kp*up/T)/(np+1)
+    # negative_averages = a[negative_indices]
+    # averages = jnp.zeros_like(a)
+    # averages = averages.at[positive_indices].set(positive_averages)
+    # averages = averages.at[negative_indices].set(negative_averages)
     # averages = (a*n + k*u/T)/(n+1)
     # return averages
 
     time_differences = x['time_differences']
     cum_amounts = x['cum_amounts']
-    durations = x['durations']
+    duration = x['duration']
     new_amounts = k*u
+    average_amount_per_time = jnp.zeros((m,1))
     for i in range(m):
         current_time_differences = time_differences[i]
         current_cum_amounts = cum_amounts[i]
-        new_current_amount = np.insert(current_cum_amounts, 0, new_amounts[i])
-        new_time_current_difference = np.insert(current_time_differences, 0, T)
+ 
+        new_current_amount = jnp.concatenate((current_cum_amounts, jnp.array(new_amounts[i])))
+        new_time_current_difference = jnp.concatenate((current_time_differences, jnp.array([T])))
+
         time_amount_product = new_time_current_difference * new_current_amount
-        total_time_amount = np.sum(time_amount_product)
-        duration = delta_times[-1]
-        average_amount = total_time_amount / duration
-        average_amount_per_time = average_amount / duration
-
-            
-
+        total_time_amount = jnp.sum(time_amount_product)
+        curret_duration = duration[i]
+        average_amount = total_time_amount / curret_duration
+        # average_amount_per_time = average_amount / curret_duration
+        
+        average_amount_per_time = average_amount_per_time.at[i].set(average_amount / curret_duration)
+    averages = average_amount_per_time
     return averages
 
 def loss(params, x):

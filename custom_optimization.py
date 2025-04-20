@@ -31,20 +31,28 @@ def set_weights(shadow_transactions):
 def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 1000):
     shadow_transactions = set_weights(shadow_transactions)
     # k[i] = new number of shares for stock i
+    m = shadow_transactions['num_stocks']
     x = {"a": jnp.array(shadow_transactions['average_price_per_time']), 
          "n": jnp.array(shadow_transactions['num_transactions']),
          "u": jnp.array(shadow_transactions['current_prices']),
-         "m": shadow_transactions['num_stocks'],
+         "m": m,
          "l": limit,
          "T": T,
          "w": jnp.array(shadow_transactions['weights']),
          'time_differences': shadow_transactions['time_differences'],
          'cum_amounts': shadow_transactions['cum_amounts'],
-         'duration': shadow_transactions['duration']
+         'duration': shadow_transactions['duration'],
+         'total_time_amount': shadow_transactions['total_time_amount'],
+        #  'time_amount_product': shadow_transactions['time_amount_product']
         }
     max_k = jnp.array(jnp.ceil(limit/x["u"]))
-    # max_k = jnp.zeros_like(x["u"])
+    ku_0 = jnp.full((m,1), jnp.ceil(limit/m))
+    max_k = jnp.zeros_like(x["u"])
     params = {"k":max_k}
+
+    params = {"ku":ku_0}
+    test = model2(params, x)
+
     start_learning_rate = 1e-2
     optimizer = optax.adam(start_learning_rate)
     opt_state = optimizer.init(params)
@@ -137,3 +145,15 @@ def loss(params, x):
     # residual = averages - mean_averages
     # loss =  jnp.mean((residual)**2) + (l - jnp.dot(k,u))**2 + negative_penalty
     return loss
+
+def model2(params, x):
+    duration = x['duration']
+    ku = params["ku"]
+    total_time_amount = x['total_time_amount']
+    T=x["T"]
+    new_duration = duration + T
+    added_time_amount = - T * ku
+    new_time_amount = total_time_amount + added_time_amount
+    new_average_amount = new_time_amount / new_duration
+    new_average_amount_per_time =  new_average_amount / new_duration
+    return new_average_amount_per_time

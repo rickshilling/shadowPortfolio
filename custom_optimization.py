@@ -40,42 +40,50 @@ def arg_min_variance(shadow_transactions, T=1, limit = 27*7, num_iterations = 10
          "T": T,
          "w": jnp.array(shadow_transactions['weights']),
          'time_differences': shadow_transactions['time_differences'],
-         'cum_amounts': shadow_transactions['cum_amounts'],
+         'cumulative_amounts': shadow_transactions['cumulative_amounts'],
          'duration': shadow_transactions['duration'],
          'total_time_amount': shadow_transactions['total_time_amount'],
         #  'time_amount_product': shadow_transactions['time_amount_product']
         }
     max_k = jnp.array(jnp.ceil(limit/x["u"]))
-    ku_0 = jnp.full((m,1), jnp.ceil(limit/m))
+    ku_0 = jnp.full((m,1), -jnp.ceil(limit/m))
     max_k = jnp.zeros_like(x["u"])
-    params = {"k":max_k}
+    # params = {"k":max_k}
 
     params = {"ku":ku_0}
-    test = model2(params, x)
 
-    start_learning_rate = 1e-2
+    start_learning_rate = 1e-1
     optimizer = optax.adam(start_learning_rate)
     opt_state = optimizer.init(params)
     losses = []
     amounts = []
     for iteration in range(num_iterations):
-        current_loss, grads = jax.value_and_grad(loss)(params, x)
+        # current_loss, grads = jax.value_and_grad(loss)(params, x)
+        current_loss, grads = jax.value_and_grad(loss2)(params, x)
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
-        amount = jnp.dot(jnp.squeeze(params["k"]),jnp.squeeze(x["u"]))
+        # amount = jnp.dot(jnp.squeeze(params["k"]),jnp.squeeze(x["u"]))
+        amount = params["ku"]
         losses.append(current_loss)
         amounts.append(amount)
-        if jnp.mod(iteration, 100)==0:
-            float_list = jnp.squeeze(params["k"]).tolist()
+        if jnp.mod(iteration, 1000)==0:
+            # float_list = jnp.squeeze(params["k"]).tolist()
+            float_list = jnp.squeeze(params["ku"]).tolist()
             int_parameters = [int(x) for x in float_list]
             print((current_loss.item(), int_parameters))
-    float_list = jnp.squeeze(params["k"]).tolist()
+    # float_list = jnp.squeeze(params["k"]).tolist()
+    float_list = jnp.squeeze(params["ku"]).tolist()
     int_parameters = [int(x) for x in float_list]
     print("Learned parameters:", float_list)
-    new_average_price_per_time = model(params,x)
-    shadow_transactions["new_shares"] = params["k"]
+    # new_average_price_per_time = model(params,x)
+    # shadow_transactions["new_shares"] = params["k"]
+    # shadow_transactions["new_average_price_per_time"] = new_average_price_per_time
+    # shadow_transactions["new_amount"] = amount
+    new_average_price_per_time = model2(params,x)
+    k = params["ku"]/x['u']
+    shadow_transactions["new_shares"] = k
     shadow_transactions["new_average_price_per_time"] = new_average_price_per_time
-    shadow_transactions["new_amount"] = amount
+    shadow_transactions["new_amount"] = params["ku"]
     return shadow_transactions, losses
     
 def model(params, x):
@@ -107,15 +115,15 @@ def model(params, x):
     # return averages
 
     time_differences = x['time_differences']
-    cum_amounts = x['cum_amounts']
+    cumulative_amounts = x['cumulative_amounts']
     duration = x['duration']
     new_amounts = k*u
     average_amount_per_time = jnp.zeros((m,1))
     for i in range(m):
         current_time_differences = time_differences[i]
-        current_cum_amounts = cum_amounts[i]
+        current_cumulative_amounts = cumulative_amounts[i]
  
-        new_current_amount = jnp.concatenate((current_cum_amounts, jnp.array(new_amounts[i])))
+        new_current_amount = jnp.concatenate((current_cumulative_amounts, jnp.array(new_amounts[i])))
         new_time_current_difference = jnp.concatenate((current_time_differences, jnp.array([T])))
 
         time_amount_product = new_time_current_difference * new_current_amount
@@ -148,12 +156,28 @@ def loss(params, x):
 
 def model2(params, x):
     duration = x['duration']
-    ku = params["ku"]
-    total_time_amount = x['total_time_amount']
-    T=x["T"]
-    new_duration = duration + T
-    added_time_amount = - T * ku
-    new_time_amount = total_time_amount + added_time_amount
-    new_average_amount = new_time_amount / new_duration
-    new_average_amount_per_time =  new_average_amount / new_duration
+    ku = params["ku"] #($)
+    total_time_amount = x['total_time_amount'] # (days)*($)
+    T=x["T"] # (days)
+    new_duration = duration + T # (days)
+    # added_time_amount = - T * ku # (days)*($)
+    added_time_amount = T * ku # (days)*($)
+    new_time_amount = total_time_amount + added_time_amount # (days)*($)
+    new_average_amount = new_time_amount / new_duration # ($)
+    new_average_amount_per_time =  new_average_amount / new_duration # ($)/(days)
     return new_average_amount_per_time
+
+def loss2(params, x):
+    averages = model2(params, x)
+    # ku=jnp.squeeze(params["ku"])
+    ku=jnp.abs(jnp.squeeze(params["ku"]))
+    l=jnp.squeeze(x["l"])
+    
+    tau = 1e1
+    negative_penalty = jnp.exp(-ku/tau)
+
+    loss = 1e2*jnp.var(averages) + (l - jnp.sum(ku))**2 + jnp.sum(negative_penalty)
+    # loss = 1e4*jnp.var(averages) + (l - jnp.sum(ku))**2 + jnp.sum(negative_penalty)
+    # loss = jnp.var(averages)
+    return loss
+

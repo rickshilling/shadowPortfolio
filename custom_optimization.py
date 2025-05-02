@@ -181,3 +181,26 @@ def loss2(params, x):
     # loss = jnp.var(averages)
     return loss
 
+
+def arg_min_variance2(shadow_transactions, T=1, limit = 27*7, eps=1e-6):
+    m = shadow_transactions['num_stocks']
+    (good_standing_indices, good_standing_booleans) = jnp.where(shadow_transactions['good_standing']>eps)
+    remaining_amount = limit
+    # new_average_price_per_time = shadow_transactions['average_price_per_time']
+    duration = shadow_transactions['duration']
+    new_average_price_per_time = (shadow_transactions['average_price_per_time']*duration)/(duration+T)
+    
+    new_num_shares = np.zeros((shadow_transactions['num_stocks'],1),dtype=int)
+    while remaining_amount > 0:
+        max_good_index = jnp.argmax(new_average_price_per_time[good_standing_indices])
+        max_index = good_standing_indices[max_good_index]
+        # max_index = jnp.argmax(new_average_price_per_time)
+        new_num_shares[max_index] = new_num_shares[max_index] + 1
+        amount = new_num_shares[max_index] * shadow_transactions['current_prices'][max_index]
+        new_duration = shadow_transactions['duration'][max_index] + T # (days)
+        added_time_amount_product = -T * amount # (days)*($)
+        new_time_amount = shadow_transactions['total_time_amount'][max_index] + added_time_amount_product # (days)*($)
+        new_average_amount = new_time_amount / new_duration # ($)
+        new_average_price_per_time[max_index] =  new_average_amount / new_duration # ($)/(days)
+        remaining_amount = remaining_amount - shadow_transactions['current_prices'][max_index]
+    pass

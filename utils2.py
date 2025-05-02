@@ -1,10 +1,14 @@
 import numpy as np
 import pandas as pd
 
-def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
+def get_shadow_transactions(transactions, shadow, reference_date, exclusion_tickers = [], eps = 1e-6):
     shadow_transactions = dict()
+    entry_index = 0
     for shadow_index, shadow_row in shadow.iterrows():
         shadow_ticker = shadow_row['Ticker'].replace("*","")
+        if shadow_ticker in exclusion_tickers:
+            print(shadow_ticker)
+            continue
         amounts = []
         delta_times = []
         quantities = []
@@ -52,7 +56,7 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
         shadow_transactions[shadow_ticker]['delta_times'] = delta_times
         # shadow_transactions[shadow_ticker]['average_price_per_time'] = average_price_per_time
         shadow_transactions[shadow_ticker]['average_price_per_time'] = average_amount_per_time
-        shadow_transactions[shadow_ticker]['index'] = shadow_index
+        shadow_transactions[shadow_ticker]['index'] = entry_index
         shadow_transactions[shadow_ticker]['Notes'] = str(shadow_row['Notes'])
         shadow_transactions[shadow_ticker]['current_quantity'] = current_quantity
         shadow_transactions[shadow_ticker]['quantities'] = quantities
@@ -63,6 +67,7 @@ def get_shadow_transactions(transactions, shadow, reference_date, eps = 1e-6):
         shadow_transactions[shadow_ticker]['duration'] = duration
         shadow_transactions[shadow_ticker]['total_time_amount'] = total_time_amount
         # shadow_transactions[shadow_ticker]['time_amount_product'] = time_amount_product
+        entry_index = entry_index + 1
     shadow_transactions = refactor_shadow_transactions(shadow_transactions)
     return shadow_transactions
 
@@ -89,6 +94,7 @@ def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
     cumulative_amounts = dict()
     total_time_amount = np.zeros((num_stocks,1)) 
     time_amount_product = np.zeros((num_stocks,1))
+    good_standing = np.ones((num_stocks,1))
     for stock_index in range(num_stocks):
         found = False
         for ticker in shadow_transactions.keys():
@@ -118,6 +124,9 @@ def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
             cumulative_amounts[stock_index] = shadow_transactions[key]['cumulative_amounts']
             duration[stock_index] = shadow_transactions[key]['duration']
             total_time_amount[stock_index] = shadow_transactions[key]['total_time_amount']
+            if ("Earnings probation" in Notes[stock_index]) or ("Exceeds size limit" in Notes[stock_index]):
+                good_standing[stock_index] = 0
+            
             # time_amount_product[stock_index] = shadow_transactions[key]['time_amount_product']
         else:
             error_string = 'Error: ' + str(stock_index) + ' does not have a key in shadow transactions'
@@ -143,5 +152,6 @@ def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
     new_shadow_transactions['cumulative_amounts'] = cumulative_amounts
     new_shadow_transactions['duration'] = duration
     new_shadow_transactions['total_time_amount'] = total_time_amount
+    new_shadow_transactions['good_standing'] = good_standing
     # new_shadow_transactions['time_amount_product'] = time_amount_product
     return new_shadow_transactions

@@ -190,17 +190,34 @@ def arg_min_variance2(shadow_transactions, T=1, limit = 27*7, eps=1e-6):
     duration = shadow_transactions['duration']
     new_average_price_per_time = (shadow_transactions['average_price_per_time']*duration)/(duration+T)
     
+    # time_differences = np.diff(delta_times)
+    # time_differences = np.insert(time_differences, 0, delta_times[0])
+    # cumulative_amounts = np.flip(np.cumsum(np.flip(amounts)))
+    # time_amount_product = time_differences * cumulative_amounts # (days)*($)
+    # total_time_amount = np.sum(time_amount_product) # (days)*($)
+    # duration = delta_times[-1] # (days)
+    # average_amount = total_time_amount / duration # ($)
+    # average_amount_per_time = average_amount / duration # ($)/(days)
+
+    time_differences = shadow_transactions['time_differences']
+    cumulative_amounts = shadow_transactions['cumulative_amounts']
     new_num_shares = np.zeros((shadow_transactions['num_stocks'],1),dtype=int)
     while remaining_amount > 0:
         max_good_index = jnp.argmax(new_average_price_per_time[good_standing_indices])
         max_index = good_standing_indices[max_good_index]
-        # max_index = jnp.argmax(new_average_price_per_time)
         new_num_shares[max_index] = new_num_shares[max_index] + 1
-        amount = new_num_shares[max_index] * shadow_transactions['current_prices'][max_index]
-        new_duration = shadow_transactions['duration'][max_index] + T # (days)
-        added_time_amount_product = -T * amount # (days)*($)
-        new_time_amount = shadow_transactions['total_time_amount'][max_index] + added_time_amount_product # (days)*($)
-        new_average_amount = new_time_amount / new_duration # ($)
-        new_average_price_per_time[max_index] =  new_average_amount / new_duration # ($)/(days)
-        remaining_amount = remaining_amount - shadow_transactions['current_prices'][max_index]
+        for i in range(m):
+            time_difference = time_differences[i]
+            n = len(time_difference)
+            new_time_difference = np.insert(time_difference, 0, T)
+            last_amount =  - new_num_shares[i] * shadow_transactions['current_prices'][i]
+            new_amount = np.insert(shadow_transactions['amounts'][i][0:n], 0, last_amount)
+            new_cumulative_amount = np.flip(np.cumsum(np.flip(new_amount)))
+            new_time_amount_product = new_time_difference * new_cumulative_amount # (days)*($)
+            new_total_time_amount = np.sum(new_time_amount_product) 
+            new_duration = duration[i] + T
+            new_average_amount = new_total_time_amount / new_duration # ($)
+            new_average_price_per_time[i] = new_average_amount / new_duration # ($)/(days)
+            if i == max_index:
+                remaining_amount = remaining_amount + last_amount
     pass

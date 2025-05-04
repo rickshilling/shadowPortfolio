@@ -201,16 +201,16 @@ def arg_min_variance2(shadow_transactions, T=1, limit = 27*7, eps=1e-6):
 
     time_differences = shadow_transactions['time_differences']
     cumulative_amounts = shadow_transactions['cumulative_amounts']
-    new_num_shares = np.zeros((shadow_transactions['num_stocks'],1),dtype=int)
+    new_shares = np.zeros((shadow_transactions['num_stocks'],1),dtype=int)
     while remaining_amount > 0:
         max_good_index = jnp.argmax(new_average_price_per_time[good_standing_indices])
         max_index = good_standing_indices[max_good_index]
-        new_num_shares[max_index] = new_num_shares[max_index] + 1
+        new_shares[max_index] = new_shares[max_index] + 1
         for i in range(m):
             time_difference = time_differences[i]
             n = len(time_difference)
             new_time_difference = np.insert(time_difference, 0, T)
-            last_amount =  - new_num_shares[i] * shadow_transactions['current_prices'][i]
+            last_amount =  - new_shares[i] * shadow_transactions['current_prices'][i]
             new_amount = np.insert(shadow_transactions['amounts'][i][0:n], 0, last_amount)
             new_cumulative_amount = np.flip(np.cumsum(np.flip(new_amount)))
             new_time_amount_product = new_time_difference * new_cumulative_amount # (days)*($)
@@ -220,4 +220,8 @@ def arg_min_variance2(shadow_transactions, T=1, limit = 27*7, eps=1e-6):
             new_average_price_per_time[i] = new_average_amount / new_duration # ($)/(days)
             if i == max_index:
                 remaining_amount = remaining_amount + last_amount
-    pass
+
+    shadow_transactions["new_shares"] = new_shares
+    shadow_transactions["new_average_price_per_time"] = new_average_price_per_time
+    shadow_transactions["new_amount"] = new_shares * shadow_transactions['current_prices']
+    return shadow_transactions

@@ -68,19 +68,21 @@ def set_mean_amount_per_day(transactions, reference_date):
             transactions['mean_amount_per_day'][ticker_index] = 0
     return transactions
 
-def set_cost_basis_and_sales_and_current_total_amount(transactions):
+def set_current_total_value_and_cost_basis_and_sales(transactions):
+    transactions['current_total_value'] = dict()
+    transactions['cost_basis'] = dict()
+    transactions['sales'] = dict()
     for ticker_index in range(transactions['num_stocks']):
-        # if transaction_row['Quantity'] > 0:
-        #     total_cost_basis = total_cost_basis + transaction_row['Amount']
+        cost_basis_indices = np.where(np.array(transactions['transaction_amounts'][ticker_index]) > 0)
+        sales_indices = np.where(np.array(transactions['transaction_amounts'][ticker_index]) < 0)
+        transactions['cost_basis'][ticker_index] = np.sum(np.take(transactions['transaction_amounts'][ticker_index], cost_basis_indices).tolist())
+        transactions['sales'][ticker_index] = np.sum(np.take(transactions['transaction_amounts'][ticker_index], sales_indices).tolist())
+        cost_basis_quantity = np.sum(np.take(transactions['transaction_quantities'][ticker_index], cost_basis_indices))
+        sale_quantity = np.sum(np.take(transactions['transaction_quantities'][ticker_index], sales_indices))
+        current_quantity = cost_basis_quantity - sale_quantity
+        transactions['current_total_value'][ticker_index] = np.sum(transactions['CurrentPrice($)'][ticker_index]*current_quantity)
+    return transactions
 
-    #         average_price_per_time = 0
-    #     else:
-    #         price_paid_per_time = 0
-    #         for amount, delta_time in zip(amount, delta_dates):
-    #             if delta_time > 0:
-    #                 price_paid_per_time = price_paid_per_time + amount/delta_time
-    #         average_price_per_time = -price_paid_per_time/len(amount)
-        
     #     if delta_dates == []:
     #         average_amount_per_time = 0
     #     else:

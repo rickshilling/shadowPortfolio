@@ -29,17 +29,21 @@ def get_shadow_transactions(all_transactions, shadow):
 
 def refactor_transactions(t): #(t)ransactions
     nt = dict() #(n)ew (t)ransactions
-    nt['CurrentPrice($)'] = dict()
-    nt['Price-EarningsRatio(X)'] = dict()
+    num_stocks = len(t.keys())
+    nt['CurrentPrice($)'] = np.zeros((num_stocks,1))
+    nt['Price-EarningsRatio(X)'] = np.zeros((num_stocks,1))
     nt['Notes'] = dict() 
-    nt['Rel PriceStrgth(%)'] = dict()
+    nt['Rel PriceStrgth(%)'] = np.zeros((num_stocks,1))
     nt['transaction_amounts'] = dict()
     nt['transaction_quantities'] = dict()
     nt['transaction_dates'] = dict()
     nt['ticker'] = dict()
     for i, ticker in enumerate(t.keys()):
         nt['CurrentPrice($)'][i] = t[ticker]['CurrentPrice($)']
-        nt['Price-EarningsRatio(X)'][i] = t[ticker]['Price-EarningsRatio(X)']
+        if t[ticker]['Price-EarningsRatio(X)'] != 'nmf':
+            nt['Price-EarningsRatio(X)'][i] = t[ticker]['Price-EarningsRatio(X)']
+        else:
+            nt['Price-EarningsRatio(X)'][i] = 0
         nt['Rel PriceStrgth(%)'][i] = t[ticker]['Rel PriceStrgth(%)']
         nt['transaction_amounts'][i] = t[ticker]['transaction_amounts']
         nt['transaction_quantities'][i] = t[ticker]['transaction_quantities']
@@ -50,7 +54,7 @@ def refactor_transactions(t): #(t)ransactions
     return nt
 
 def set_mean_amount_per_day(t, reference_date): #(t)ransactions
-    t['mean_amount_per_day'] = dict()
+    t['mean_amount_per_day'] = np.zeros((t['num_stocks'],1))
     for i in range(t['num_stocks']):
         cumulative_transaction_amounts = np.cumsum(t['transaction_amounts'][i])
         date_differences = np.diff(t['transaction_dates'][i])

@@ -4,7 +4,7 @@ def get_shadow_transactions(all_transactions, shadow):
     # Sign Convention: 
     #   If I buy then transaction_amounts is positive and transaction_quantities is positive
     #   If I sell then transaction_amounts is negative and transaction_quantities is positive
-    transactions = dict()
+    t = dict() #(t)ransactions
     for shadow_index, shadow_row in shadow.iterrows():
         ticker = shadow_row['Ticker'].replace("*","")
         transaction_amounts = []
@@ -15,189 +15,77 @@ def get_shadow_transactions(all_transactions, shadow):
                 transaction_amounts.append(-transaction_row['Amount'])
                 transaction_quantities.append(abs(transaction_row['Quantity']))
                 transaction_dates.append(transaction_row['TransactionDate'].to_pydatetime().date())
-        transactions[ticker] = dict()
-        transactions[ticker]['CurrentPrice($)'] = shadow_row['CurrentPrice($)']
-        transactions[ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']
-        transactions[ticker]['Rel PriceStrgth(%)'] = shadow_row['Rel PriceStrgth(%)']
+        t[ticker] = dict()
+        t[ticker]['CurrentPrice($)'] = shadow_row['CurrentPrice($)']
+        t[ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']
+        t[ticker]['Rel PriceStrgth(%)'] = shadow_row['Rel PriceStrgth(%)']
         indices = np.argsort(transaction_dates) # Ensure oldest date first, most recent date last
-        transactions[ticker]['transaction_amounts'] = np.take(transaction_amounts, indices).tolist()
-        transactions[ticker]['transaction_quantities'] = np.take(transaction_quantities, indices).tolist()
-        transactions[ticker]['transaction_dates'] = np.take(transaction_dates, indices).tolist()
-        transactions[ticker]['Notes'] = str(shadow_row['Notes']) 
-    transactions = refactor_transactions(transactions)
-    return transactions
+        t[ticker]['transaction_amounts'] = np.take(transaction_amounts, indices).tolist()
+        t[ticker]['transaction_quantities'] = np.take(transaction_quantities, indices).tolist()
+        t[ticker]['transaction_dates'] = np.take(transaction_dates, indices).tolist()
+        t[ticker]['Notes'] = str(shadow_row['Notes']) 
+    t = refactor_transactions(t)
+    return t
 
-def refactor_transactions(transactions):
-    new_transactions = dict()
-    new_transactions['CurrentPrice($)'] = dict()
-    new_transactions['Price-EarningsRatio(X)'] = dict()
-    new_transactions['Notes'] = dict() 
-    new_transactions['Rel PriceStrgth(%)'] = dict()
-    new_transactions['transaction_amounts'] = dict()
-    new_transactions['transaction_quantities'] = dict()
-    new_transactions['transaction_dates'] = dict()
-    new_transactions['ticker'] = dict()
-    for ticker_index, ticker in enumerate(transactions.keys()):
-        new_transactions['CurrentPrice($)'][ticker_index] = transactions[ticker]['CurrentPrice($)']
-        new_transactions['Price-EarningsRatio(X)'][ticker_index] = transactions[ticker]['Price-EarningsRatio(X)']
-        new_transactions['Rel PriceStrgth(%)'][ticker_index] = transactions[ticker]['Rel PriceStrgth(%)']
-        new_transactions['transaction_amounts'][ticker_index] = transactions[ticker]['transaction_amounts']
-        new_transactions['transaction_quantities'][ticker_index] = transactions[ticker]['transaction_quantities']
-        new_transactions['transaction_dates'][ticker_index] = transactions[ticker]['transaction_dates']
-        new_transactions['Notes'][ticker_index] = transactions[ticker]['Notes']
-        new_transactions['ticker'][ticker_index] = ticker
-    new_transactions['num_stocks'] = ticker_index
-    return new_transactions
+def refactor_transactions(t): #(t)ransactions
+    nt = dict() #(n)ew (t)ransactions
+    nt['CurrentPrice($)'] = dict()
+    nt['Price-EarningsRatio(X)'] = dict()
+    nt['Notes'] = dict() 
+    nt['Rel PriceStrgth(%)'] = dict()
+    nt['transaction_amounts'] = dict()
+    nt['transaction_quantities'] = dict()
+    nt['transaction_dates'] = dict()
+    nt['ticker'] = dict()
+    for i, ticker in enumerate(t.keys()):
+        nt['CurrentPrice($)'][i] = t[ticker]['CurrentPrice($)']
+        nt['Price-EarningsRatio(X)'][i] = t[ticker]['Price-EarningsRatio(X)']
+        nt['Rel PriceStrgth(%)'][i] = t[ticker]['Rel PriceStrgth(%)']
+        nt['transaction_amounts'][i] = t[ticker]['transaction_amounts']
+        nt['transaction_quantities'][i] = t[ticker]['transaction_quantities']
+        nt['transaction_dates'][i] = t[ticker]['transaction_dates']
+        nt['Notes'][i] = t[ticker]['Notes']
+        nt['ticker'][i] = ticker
+    nt['num_stocks'] = len(t.keys())
+    return nt
 
-def set_mean_amount_per_day(transactions, reference_date):
-    transactions['mean_amount_per_day'] = dict()
-    for ticker_index in range(transactions['num_stocks']):
-        cumulative_transaction_amounts = np.cumsum(transactions['transaction_amounts'][ticker_index])
-        date_differences = np.diff(transactions['transaction_dates'][ticker_index])
+def set_mean_amount_per_day(t, reference_date): #(t)ransactions
+    t['mean_amount_per_day'] = dict()
+    for i in range(t['num_stocks']):
+        cumulative_transaction_amounts = np.cumsum(t['transaction_amounts'][i])
+        date_differences = np.diff(t['transaction_dates'][i])
         day_differences = [x.days for x in date_differences]
-        if transactions['transaction_dates'][ticker_index] != []:
-            last_transaction_date = transactions['transaction_dates'][ticker_index][-1]
+        if t['transaction_dates'][i] != []:
+            last_transaction_date = t['transaction_dates'][i][-1]
             last_day_difference = (reference_date - last_transaction_date).days
             day_differences = np.append(day_differences, last_day_difference)
             transaction_amounts_day_product = cumulative_transaction_amounts * day_differences #($)*(day)
             total_transaction_amounts_day_product = np.sum(transaction_amounts_day_product) #($)*(day)
-            duration = (reference_date - transactions['transaction_dates'][ticker_index][0]).days #(day)
+            duration = (reference_date - t['transaction_dates'][i][0]).days #(day)
             mean_amount = total_transaction_amounts_day_product / duration #($)
-            transactions['mean_amount_per_day'][ticker_index] = mean_amount/duration
+            t['mean_amount_per_day'][i] = mean_amount/duration
         else:
-            transactions['mean_amount_per_day'][ticker_index] = 0
-    return transactions
+            t['mean_amount_per_day'][i] = 0
+    return t
 
-def set_current_total_value_and_cost_basis_and_sales(transactions):
-    transactions['current_total_value'] = dict()
-    transactions['cost_basis'] = dict()
-    transactions['sales'] = dict()
-    for ticker_index in range(transactions['num_stocks']):
-        cost_basis_indices = np.where(np.array(transactions['transaction_amounts'][ticker_index]) > 0)
-        sales_indices = np.where(np.array(transactions['transaction_amounts'][ticker_index]) < 0)
-        transactions['cost_basis'][ticker_index] = np.sum(np.take(transactions['transaction_amounts'][ticker_index], cost_basis_indices).tolist())
-        transactions['sales'][ticker_index] = np.sum(np.take(transactions['transaction_amounts'][ticker_index], sales_indices).tolist())
-        cost_basis_quantity = np.sum(np.take(transactions['transaction_quantities'][ticker_index], cost_basis_indices))
-        sale_quantity = np.sum(np.take(transactions['transaction_quantities'][ticker_index], sales_indices))
+def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions
+    t['current_total_value'] = dict()
+    t['cost_basis'] = dict()
+    t['sales'] = dict()
+    for i in range(t['num_stocks']):
+        cost_basis_indices = np.where(np.array(t['transaction_amounts'][i]) > 0)
+        sales_indices = np.where(np.array(t['transaction_amounts'][i]) < 0)
+        t['cost_basis'][i] = np.sum(np.take(t['transaction_amounts'][i], cost_basis_indices).tolist())
+        t['sales'][i] = np.sum(np.take(t['transaction_amounts'][i], sales_indices).tolist())
+        cost_basis_quantity = np.sum(np.take(t['transaction_quantities'][i], cost_basis_indices))
+        sale_quantity = np.sum(np.take(t['transaction_quantities'][i], sales_indices))
         current_quantity = cost_basis_quantity - sale_quantity
-        transactions['current_total_value'][ticker_index] = np.sum(transactions['CurrentPrice($)'][ticker_index]*current_quantity)
-    return transactions
+        t['current_total_value'][i] = np.sum(t['CurrentPrice($)'][i]*current_quantity)
+    return t
 
-    #     if delta_dates == []:
-    #         average_amount_per_time = 0
-    #     else:
-    #         time_differences = np.diff(delta_dates)
-    #         time_differences = np.insert(time_differences, 0, delta_dates[0])
-    #         cumulative_amounts = np.flip(np.cumsum(np.flip(amount)))
-    #         time_amount_product = time_differences * cumulative_amounts # (days)*($)
-    #         total_time_amount = np.sum(time_amount_product) # (days)*($)
-    #         duration = delta_dates[-1] # (days)
-    #         average_amount = total_time_amount / duration # ($)
-    #         average_amount_per_time = average_amount / duration # ($)/(days)
-
-    #     shadow_transactions[shadow_ticker] = dict()
-    #     shadow_transactions[shadow_ticker]['CurrentPrice($)'] = shadow_row['CurrentPrice($)']
-    #     shadow_transactions[shadow_ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']
-    #     shadow_transactions[shadow_ticker]['Rel PriceStrgth(%)'] = shadow_row['Rel PriceStrgth(%)']
-    #     shadow_transactions[shadow_ticker]['num_transactions'] = len(delta_dates)
-    #     shadow_transactions[shadow_ticker]['amount'] = amount
-    #     shadow_transactions[shadow_ticker]['delta_dates'] = delta_dates
-    #     shadow_transactions[shadow_ticker]['average_price_per_time'] = average_amount_per_time
-    #     shadow_transactions[shadow_ticker]['index'] = entry_index
-    #     shadow_transactions[shadow_ticker]['Notes'] = str(shadow_row['Notes'])
-    #     shadow_transactions[shadow_ticker]['current_quantity'] = current_quantity
-    #     shadow_transactions[shadow_ticker]['quantities'] = quantities
-    #     shadow_transactions[shadow_ticker]['total_cost_basis'] = total_cost_basis
-    #     shadow_transactions[shadow_ticker]['total_sales'] = total_sales
-    #     shadow_transactions[shadow_ticker]['time_differences'] = time_differences
-    #     shadow_transactions[shadow_ticker]['cumulative_amounts'] = cumulative_amounts
-    #     shadow_transactions[shadow_ticker]['duration'] = duration
-    #     shadow_transactions[shadow_ticker]['total_time_amount'] = total_time_amount
-    #     entry_index = entry_index + 1
-    # shadow_transactions = refactor_shadow_transactions(shadow_transactions)
-    # return shadow_transactions
-
-# def refactor_shadow_transactions(shadow_transactions, nmf_number = 1000):
-#     max_num_transactions = 0
-#     num_stocks = len(shadow_transactions.keys())
-#     for ticker in shadow_transactions.keys():
-#         max_num_transactions = np.maximum(max_num_transactions,shadow_transactions[ticker]['num_transactions'])
-#     current_prices = np.zeros((num_stocks,1))
-#     num_transactions = np.zeros((num_stocks,1), dtype=int)
-#     amounts = np.zeros((num_stocks,max_num_transactions))
-#     delta_times = np.zeros((num_stocks,max_num_transactions))
-#     average_price_per_time = np.zeros((num_stocks,1))
-#     PEs = np.zeros((num_stocks,1))
-#     order = dict()
-#     Notes = dict()
-#     Rel_PriceStrgth = np.zeros((num_stocks,1))
-#     quantities = dict()
-#     current_quantities = np.zeros((num_stocks,1))
-#     total_cost_basis = np.zeros((num_stocks,1))
-#     total_sales = np.zeros((num_stocks,1))
-#     duration = np.zeros((num_stocks,1))
-#     time_differences = dict()
-#     cumulative_amounts = dict()
-#     total_time_amount = np.zeros((num_stocks,1)) 
-#     time_amount_product = np.zeros((num_stocks,1))
-#     good_standing = np.ones((num_stocks,1))
-#     for stock_index in range(num_stocks):
-#         found = False
-#         for ticker in shadow_transactions.keys():
-#             if shadow_transactions[ticker]['index'] == stock_index:
-#                 key = ticker
-#                 found = True
-#                 break
-#         if found:
-#             current_prices[stock_index] = shadow_transactions[key]['CurrentPrice($)']
-#             num_transactions[stock_index][0] = shadow_transactions[key]['num_transactions']
-#             current_num_transactions = num_transactions[stock_index][0]
-#             amounts[stock_index][0:current_num_transactions] = shadow_transactions[key]['amounts'] 
-#             delta_times[stock_index][0:current_num_transactions] = shadow_transactions[key]['delta_times'] 
-#             average_price_per_time[stock_index] = shadow_transactions[key]['average_price_per_time']
-#             if shadow_transactions[key]['Price-EarningsRatio(X)'] == 'nmf':
-#                 PEs[stock_index] = nmf_number
-#             else:
-#                 PEs[stock_index] = shadow_transactions[key]['Price-EarningsRatio(X)']
-#             order[stock_index] = key
-#             Notes[stock_index] = shadow_transactions[key]['Notes']
-#             Rel_PriceStrgth[stock_index] = shadow_transactions[key]['Rel PriceStrgth(%)']
-#             current_quantities[stock_index] = shadow_transactions[key]['current_quantity']
-#             quantities[stock_index] = shadow_transactions[key]['quantities']
-#             total_cost_basis[stock_index] = shadow_transactions[key]['total_cost_basis']
-#             total_sales[stock_index] = shadow_transactions[key]['total_sales']
-#             time_differences[stock_index] = shadow_transactions[key]['time_differences']
-#             cumulative_amounts[stock_index] = shadow_transactions[key]['cumulative_amounts']
-#             duration[stock_index] = shadow_transactions[key]['duration']
-#             total_time_amount[stock_index] = shadow_transactions[key]['total_time_amount']
-#             if ("Earnings probation" in Notes[stock_index]) or ("Exceeds size limit" in Notes[stock_index]):
-#                 good_standing[stock_index] = 0
-            
-#             # time_amount_product[stock_index] = shadow_transactions[key]['time_amount_product']
-#         else:
-#             error_string = 'Error: ' + str(stock_index) + ' does not have a key in shadow transactions'
-#             print(error_string)
-#     new_shadow_transactions = dict()        
-#     new_shadow_transactions['tickers'] = list(shadow_transactions.keys())
-#     new_shadow_transactions['current_prices'] = current_prices
-#     new_shadow_transactions['num_transactions'] = num_transactions
-#     new_shadow_transactions['amounts'] = amounts
-#     new_shadow_transactions['delta_times'] = delta_times
-#     new_shadow_transactions['average_price_per_time'] = average_price_per_time
-#     new_shadow_transactions['Price-EarningsRatio(X)'] = PEs
-#     new_shadow_transactions['order'] = order
-#     new_shadow_transactions['num_stocks'] = len(num_transactions)
-#     new_shadow_transactions['Notes'] = Notes
-#     new_shadow_transactions['Rel PriceStrgth(%)'] = Rel_PriceStrgth
-#     new_shadow_transactions['current_quantities'] = current_quantities
-#     new_shadow_transactions['current_amounts'] = current_quantities * current_prices
-#     new_shadow_transactions['quantities'] = quantities
-#     new_shadow_transactions['total_cost_basis'] = total_cost_basis
-#     new_shadow_transactions['total_sales'] = total_sales
-#     new_shadow_transactions['time_differences'] = time_differences
-#     new_shadow_transactions['cumulative_amounts'] = cumulative_amounts
-#     new_shadow_transactions['duration'] = duration
-#     new_shadow_transactions['total_time_amount'] = total_time_amount
-#     new_shadow_transactions['good_standing'] = good_standing
-#     # new_shadow_transactions['time_amount_product'] = time_amount_product
-#     return new_shadow_transactions
+def set_good_standing(t):
+    t['good_standing'] = np.ones((t['num_stocks'],1))
+    for i in range(t['num_stocks']):
+        if ("Earnings probation" in t['Notes'][i]) or ("Exceeds size limit" in t['Notes'][i]):
+            t['good_standing'][i] = 0
+    return t

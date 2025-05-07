@@ -1,4 +1,5 @@
 import numpy as np
+from datetime import date
 
 def get_shadow_transactions(all_transactions, shadow):
     # Sign Convention: 
@@ -53,23 +54,37 @@ def refactor_transactions(t): #(t)ransactions
     nt['num_stocks'] = len(t.keys())
     return nt
 
-def set_mean_amount_per_day(t, reference_date): #(t)ransactions
-    t['mean_amount_per_day'] = np.zeros((t['num_stocks'],1))
-    for i in range(t['num_stocks']):
-        cumulative_transaction_amounts = np.cumsum(t['transaction_amounts'][i])
-        date_differences = np.diff(t['transaction_dates'][i])
+def get_mean_amount_per_day( \
+            transaction_amounts:dict, \
+            transaction_dates:dict, \
+            reference_date:date,
+            eps=1e-6
+            ):
+    num_stocks = len(transaction_amounts.keys())
+    mean_amount_per_day = np.zeros((num_stocks,))
+    for i in range(num_stocks):
+        cumulative_transaction_amounts = np.cumsum(transaction_amounts[i])
+        date_differences = np.diff(transaction_dates[i])
         day_differences = [x.days for x in date_differences]
-        if t['transaction_dates'][i] != []:
-            last_transaction_date = t['transaction_dates'][i][-1]
+        if transaction_dates[i] != []:
+            last_transaction_date = transaction_dates[i][-1]
             last_day_difference = (reference_date - last_transaction_date).days
             day_differences = np.append(day_differences, last_day_difference)
             transaction_amounts_day_product = cumulative_transaction_amounts * day_differences #($)*(day)
             total_transaction_amounts_day_product = np.sum(transaction_amounts_day_product) #($)*(day)
-            duration = (reference_date - t['transaction_dates'][i][0]).days #(day)
-            mean_amount = total_transaction_amounts_day_product / duration #($)
-            t['mean_amount_per_day'][i] = mean_amount/duration
+            duration = (reference_date - transaction_dates[i][0]).days #(day)
+            if duration > eps:
+                mean_amount = total_transaction_amounts_day_product / duration #($)
+                mean_amount_per_day[i] = mean_amount/duration
+            else:
+                mean_amount_per_day[i] = 0
         else:
-            t['mean_amount_per_day'][i] = 0
+            mean_amount_per_day[i] = 0
+    return mean_amount_per_day
+
+def set_mean_amount_per_day(t, reference_date): #(t)ransactions
+    mean_amount_per_day = get_mean_amount_per_day( t['transaction_amounts'], t['transaction_dates'], reference_date)
+    t['mean_amount_per_day'] = mean_amount_per_day
     return t
 
 def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions
@@ -87,9 +102,12 @@ def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions
         t['current_total_value'][i] = np.sum(t['CurrentPrice($)'][i]*current_quantity)
     return t
 
-def set_good_standing(t):
+def set_good_standing(t, stocks_to_exclude = []):
     t['good_standing'] = np.ones((t['num_stocks'],1))
     for i in range(t['num_stocks']):
-        if ("Earnings probation" in t['Notes'][i]) or ("Exceeds size limit" in t['Notes'][i]):
+        if \
+            "Earnings probation" in t['Notes'][i] or \
+            "Exceeds size limit" in t['Notes'][i] or \
+            t['ticker'][i] in stocks_to_exclude:
             t['good_standing'][i] = 0
     return t

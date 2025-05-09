@@ -8,7 +8,6 @@ def minimize_variance_of_new_mean_amount_per_day(t, new_date, limit = 27*7, eps=
     new_transaction_quantities = np.zeros((t['num_stocks'],),dtype=int)
     remaining_amount = limit
     while remaining_amount > 0:
-        print(remaining_amount)
         min_good_index = np.argmin(new_mean_amount_per_day[good_standing_indices])
         min_index = good_standing_indices[min_good_index]
         new_transaction_quantities[min_index] = new_transaction_quantities[min_index] + 1

@@ -103,7 +103,7 @@ def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions
     return t
 
 def set_good_standing(t, stocks_to_exclude = []):
-    t['good_standing'] = np.ones((t['num_stocks'],1))
+    t['good_standing'] = np.ones((t['num_stocks'],))
     for i in range(t['num_stocks']):
         if \
             "Earnings probation" in t['Notes'][i] or \

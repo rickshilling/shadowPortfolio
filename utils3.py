@@ -31,10 +31,10 @@ def get_shadow_transactions(all_transactions, shadow):
 def refactor_transactions(t): #(t)ransactions
     nt = dict() #(n)ew (t)ransactions
     num_stocks = len(t.keys())
-    nt['CurrentPrice($)'] = np.zeros((num_stocks,1))
-    nt['Price-EarningsRatio(X)'] = np.zeros((num_stocks,1))
+    nt['CurrentPrice($)'] = np.zeros((num_stocks,))
+    nt['Price-EarningsRatio(X)'] = np.zeros((num_stocks,))
     nt['Notes'] = dict() 
-    nt['Rel PriceStrgth(%)'] = np.zeros((num_stocks,1))
+    nt['Rel PriceStrgth(%)'] = np.zeros((num_stocks,))
     nt['transaction_amounts'] = dict()
     nt['transaction_quantities'] = dict()
     nt['transaction_dates'] = dict()

@@ -1,5 +1,5 @@
 import numpy as np
-from utils3 import get_mean_amount_per_day
+from utils import get_mean_amount_per_day
 
 def minimize_variance_of_new_mean_amount_per_day(t, new_date, limit = 27*7, eps=1e-6): #(t)ransactions
     new_mean_amount_per_day = t['mean_amount_per_day']

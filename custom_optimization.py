@@ -1,7 +1,13 @@
 import numpy as np
 from utils import get_mean_amount_per_day
+from datetime import date
 
-def minimize_variance_of_new_mean_amount_per_day(t, new_date, limit = 27*7, eps=1e-6): #(t)ransactions
+def minimize_variance_of_new_mean_amount_per_day(
+        t, 
+        end_date, 
+        start_date,
+        limit = 27*7, 
+        eps=1e-6): 
     new_mean_amount_per_day = t['mean_amount_per_day']
     (good_standing_indices, ) = np.where(t['good_standing']>eps)
     new_transaction_quantities = np.zeros((t['num_stocks'],),dtype=int)
@@ -18,7 +24,7 @@ def minimize_variance_of_new_mean_amount_per_day(t, new_date, limit = 27*7, eps=
                 new_transaction_amounts[i][-1] = t['transaction_amounts'][i][-1] + new_transaction_amount[i]
             else:
                 new_transaction_amounts[i] = new_transaction_amount[i]
-        new_mean_amount_per_day = get_mean_amount_per_day( new_transaction_amounts, t['transaction_dates'], new_date)
+        new_mean_amount_per_day = get_mean_amount_per_day( new_transaction_amounts, t['transaction_dates'], end_date)
     t['new_transaction_amounts'] = new_transaction_amounts
     t['new_mean_amount_per_day'] = new_mean_amount_per_day
     t['new_transaction_quantities'] = new_transaction_quantities

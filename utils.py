@@ -57,7 +57,8 @@ def refactor_transactions(t): #(t)ransactions
 def get_mean_amount_per_day( \
             transaction_amounts:dict, \
             transaction_dates:dict, \
-            reference_date:date,
+            end_date:date,
+            # TODO: Add start_date:date, \
             eps=1e-6
             ):
     num_stocks = len(transaction_amounts.keys())
@@ -68,11 +69,11 @@ def get_mean_amount_per_day( \
         day_differences = [x.days for x in date_differences]
         if transaction_dates[i] != []:
             last_transaction_date = transaction_dates[i][-1]
-            last_day_difference = (reference_date - last_transaction_date).days
+            last_day_difference = (end_date - last_transaction_date).days
             day_differences = np.append(day_differences, last_day_difference)
             transaction_amounts_day_product = cumulative_transaction_amounts * day_differences #($)*(day)
             total_transaction_amounts_day_product = np.sum(transaction_amounts_day_product) #($)*(day)
-            duration = (reference_date - transaction_dates[i][0]).days #(day)
+            duration = (end_date - transaction_dates[i][0]).days #(day)
             if duration > eps:
                 mean_amount = total_transaction_amounts_day_product / duration #($)
                 mean_amount_per_day[i] = mean_amount/duration
@@ -82,8 +83,8 @@ def get_mean_amount_per_day( \
             mean_amount_per_day[i] = 0
     return mean_amount_per_day
 
-def set_mean_amount_per_day(t, reference_date): #(t)ransactions
-    mean_amount_per_day = get_mean_amount_per_day( t['transaction_amounts'], t['transaction_dates'], reference_date)
+def set_mean_amount_per_day(t, end_date): #(t)ransactions
+    mean_amount_per_day = get_mean_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date)
     t['mean_amount_per_day'] = mean_amount_per_day
     return t
 

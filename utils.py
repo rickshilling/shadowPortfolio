@@ -58,12 +58,14 @@ def get_mean_amount_per_day( \
             transaction_amounts:dict, \
             transaction_dates:dict, \
             end_date:date,
-            # TODO: Add start_date:date, \
+            start_date=date(year=2020, month=1, day=1), \
             eps=1e-6
             ):
     num_stocks = len(transaction_amounts.keys())
     mean_amount_per_day = np.zeros((num_stocks,))
     for i in range(num_stocks):
+        assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
+        indices = np.argwhere(start_date<=np.array(transaction_dates[i]) and np.array(transaction_dates[i])<= end_date)  
         cumulative_transaction_amounts = np.cumsum(transaction_amounts[i])
         date_differences = np.diff(transaction_dates[i])
         day_differences = [x.days for x in date_differences]

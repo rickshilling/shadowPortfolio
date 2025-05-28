@@ -24,7 +24,7 @@ def minimize_variance_of_new_mean_amount_per_day(
                 new_transaction_amounts[i][-1] = t['transaction_amounts'][i][-1] + new_transaction_amount[i]
             else:
                 new_transaction_amounts[i] = new_transaction_amount[i]
-        new_mean_amount_per_day = get_mean_amount_per_day( new_transaction_amounts, t['transaction_dates'], end_date)
+        new_mean_amount_per_day = get_mean_amount_per_day( new_transaction_amounts, t['transaction_dates'], end_date, start_date=start_date)
     t['new_transaction_amounts'] = new_transaction_amounts
     t['new_mean_amount_per_day'] = new_mean_amount_per_day
     t['new_transaction_quantities'] = new_transaction_quantities

@@ -58,35 +58,87 @@ def get_mean_amount_per_day( \
             transaction_amounts:dict, \
             transaction_dates:dict, \
             end_date:date,
-            start_date=date(year=2020, month=1, day=1), \
+            start_date:date, \
             eps=1e-6
             ):
     num_stocks = len(transaction_amounts.keys())
     mean_amount_per_day = np.zeros((num_stocks,))
+    assert(start_date <= end_date)
+    duration = (end_date - start_date).days
     for i in range(num_stocks):
         assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
-        indices = np.argwhere(start_date<=np.array(transaction_dates[i]) and np.array(transaction_dates[i])<= end_date)  
-        cumulative_transaction_amounts = np.cumsum(transaction_amounts[i])
-        date_differences = np.diff(transaction_dates[i])
-        day_differences = [x.days for x in date_differences]
-        if transaction_dates[i] != []:
-            last_transaction_date = transaction_dates[i][-1]
-            last_day_difference = (end_date - last_transaction_date).days
-            day_differences = np.append(day_differences, last_day_difference)
-            transaction_amounts_day_product = cumulative_transaction_amounts * day_differences #($)*(day)
-            total_transaction_amounts_day_product = np.sum(transaction_amounts_day_product) #($)*(day)
-            duration = (end_date - transaction_dates[i][0]).days #(day)
-            if duration > eps:
-                mean_amount = total_transaction_amounts_day_product / duration #($)
-                mean_amount_per_day[i] = mean_amount/duration
-            else:
-                mean_amount_per_day[i] = 0
-        else:
+        if transaction_dates[i] == []:
             mean_amount_per_day[i] = 0
+            continue
+        if i ==17:
+            pass
+        # Find the last transaction date before or on the start date
+        num_transactions = len(transaction_dates[i])
+        index = min(1,num_transactions)
+        stop = False
+        while not stop:
+            if index >= num_transactions:
+                stop = True
+                last_transaction_index_before_or_on_start_date = 0
+            else:
+                if (transaction_dates[i][index] == start_date):
+                    stop = True
+                    last_transaction_index_before_or_on_start_date = index
+                elif (transaction_dates[i][index] > start_date):
+                    stop = True
+                    last_transaction_index_before_or_on_start_date = index - 1
+                else:
+                    index = index + 1
+        first_transaction_index_after_start_date = min(last_transaction_index_before_or_on_start_date + 1,num_transactions-1)
+        
+        # Find the last transaction date before or on the end date
+        index = min(1,num_transactions)
+        stop = False
+        while not stop:
+            if index >= num_transactions:
+                stop = True
+                last_transaction_index_before_or_on_end_date = num_transactions - 1
+            else:
+                if (transaction_dates[i][index] == end_date):
+                    stop = True
+                    last_transaction_index_before_or_on_end_date = index
+                elif (transaction_dates[i][index] > end_date):
+                    stop = True
+                    last_transaction_index_before_or_on_end_date = index - 1
+                else:
+                    index = index + 1
+
+        # Four intervals
+        # 1. [last_transaction_date_before_or_on_start_date, start_date]
+        # 2. [start_date, first_transaction_date_after_start_date]
+        # 3. [first_transaction_date_after_start_date, last_transaction_date_before_or_on_end_date]
+        # 4. [last_transaction_date_before_or_on_end_date, end_date]
+        last_transaction_date_before_or_on_start_date = transaction_dates[i][last_transaction_index_before_or_on_start_date]
+        first_transaction_date_after_start_date = transaction_dates[i][first_transaction_index_after_start_date]
+        last_transaction_date_before_or_on_end_date = transaction_dates[i][last_transaction_index_before_or_on_end_date]
+        
+        if last_transaction_date_before_or_on_start_date == start_date:
+            start_index = last_transaction_index_before_or_on_start_date
+        else:
+            start_index = first_transaction_index_after_start_date
+        
+        cum_amount_added_from_start_to_end = np.cumsum(transaction_amounts[i][start_index:last_transaction_index_before_or_on_end_date])
+        start_to_end_transaction_dates = transaction_dates[i][start_index:last_transaction_index_before_or_on_end_date]
+        assert(len(start_to_end_transaction_dates)>0)
+        date_differences = np.diff(start_to_end_transaction_dates)
+        day_differences = [x.days for x in date_differences]
+        last_transaction_date = start_to_end_transaction_dates[-1]
+        last_day_difference = (end_date - last_transaction_date).days
+        day_differences = np.append(day_differences, last_day_difference)
+        transaction_amounts_day_product = cum_amount_added_from_start_to_end * day_differences #($)*(day)
+        total_transaction_amounts_day_product = np.sum(transaction_amounts_day_product) #($)*(day)
+        mean_amount = total_transaction_amounts_day_product / duration #($)
+        mean_amount_per_day[i] = mean_amount/duration
+        
     return mean_amount_per_day
 
-def set_mean_amount_per_day(t, end_date): #(t)ransactions
-    mean_amount_per_day = get_mean_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date)
+def set_mean_amount_per_day(t, end_date, start_date): #(t)ransactions
+    mean_amount_per_day = get_mean_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date, start_date)
     t['mean_amount_per_day'] = mean_amount_per_day
     return t
 

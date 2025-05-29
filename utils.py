@@ -91,6 +91,8 @@ def get_mean_amount_per_day( \
                     index = index + 1
         first_transaction_index_after_start_date = min(last_transaction_index_before_or_on_start_date + 1,num_transactions-1)
         
+        if i==17:
+            pass
         # Find the last transaction date before or on the end date
         index = min(1,num_transactions)
         stop = False
@@ -122,19 +124,22 @@ def get_mean_amount_per_day( \
         else:
             start_index = first_transaction_index_after_start_date
         
-        cum_amount_added_from_start_to_end = np.cumsum(transaction_amounts[i][start_index:last_transaction_index_before_or_on_end_date])
-        start_to_end_transaction_dates = transaction_dates[i][start_index:last_transaction_index_before_or_on_end_date]
-        assert(len(start_to_end_transaction_dates)>0)
-        date_differences = np.diff(start_to_end_transaction_dates)
-        day_differences = [x.days for x in date_differences]
-        last_transaction_date = start_to_end_transaction_dates[-1]
-        last_day_difference = (end_date - last_transaction_date).days
-        day_differences = np.append(day_differences, last_day_difference)
-        transaction_amounts_day_product = cum_amount_added_from_start_to_end * day_differences #($)*(day)
-        total_transaction_amounts_day_product = np.sum(transaction_amounts_day_product) #($)*(day)
-        mean_amount = total_transaction_amounts_day_product / duration #($)
-        mean_amount_per_day[i] = mean_amount/duration
-        
+        cum_amount_added_from_start_to_end = np.cumsum(transaction_amounts[i][start_index:(last_transaction_index_before_or_on_end_date+1)])
+        start_to_end_transaction_dates = transaction_dates[i][start_index:(last_transaction_index_before_or_on_end_date+1)]
+        if len(start_to_end_transaction_dates) > 0:
+            if i==17:
+                pass
+            date_differences = np.diff(start_to_end_transaction_dates)
+            day_differences = [x.days for x in date_differences]
+            last_transaction_date = start_to_end_transaction_dates[-1]
+            last_day_difference = (end_date - last_transaction_date).days
+            day_differences = np.append(day_differences, last_day_difference)
+            transaction_amounts_day_product = cum_amount_added_from_start_to_end * day_differences #($)*(day)
+            total_transaction_amounts_day_product = np.sum(transaction_amounts_day_product) #($)*(day)
+            mean_amount = total_transaction_amounts_day_product / duration #($)
+            mean_amount_per_day[i] = mean_amount/duration
+        else:
+            mean_amount_per_day[i] = 0
     return mean_amount_per_day
 
 def set_mean_amount_per_day(t, end_date, start_date): #(t)ransactions

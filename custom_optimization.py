@@ -5,12 +5,16 @@ from datetime import date
 def minimize_variance_of_new_mean_amount_per_day(
         t, 
         end_date, 
+        new_transaction_date,
         start_date,
         limit = 27*7, 
         eps=1e-6): 
     new_mean_amount_per_day = t['mean_amount_per_day']
     (good_standing_indices, ) = np.where(t['good_standing']>eps)
     new_transaction_quantities = np.zeros((t['num_stocks'],),dtype=int)
+    new_transaction_dates = t['transaction_dates']
+    for i in range(t['num_stocks']):
+        new_transaction_dates[i].append(new_transaction_date)
     remaining_amount = limit
     while remaining_amount > 0:
         min_good_index = np.argmin(new_mean_amount_per_day[good_standing_indices])
@@ -20,11 +24,12 @@ def minimize_variance_of_new_mean_amount_per_day(
         new_transaction_amount = new_transaction_quantities * t['CurrentPrice($)']
         new_transaction_amounts = t['transaction_amounts']
         for i in range(t['num_stocks']):
-            if t['transaction_amounts'][i] != []:
-                new_transaction_amounts[i][-1] = t['transaction_amounts'][i][-1] + new_transaction_amount[i]
-            else:
-                new_transaction_amounts[i] = new_transaction_amount[i]
-        new_mean_amount_per_day = get_mean_amount_per_day( new_transaction_amounts, t['transaction_dates'], end_date, start_date=start_date)
+            new_transaction_amounts[i].append(new_transaction_amount[i])
+            # if t['transaction_amounts'][i] != []:
+            #     new_transaction_amounts[i][-1] = t['transaction_amounts'][i][-1] + new_transaction_amount[i]
+            # else:
+            #     new_transaction_amounts[i] = new_transaction_amount[i]
+        new_mean_amount_per_day = get_mean_amount_per_day( new_transaction_amounts, new_transaction_dates, end_date, start_date=start_date)
     t['new_transaction_amounts'] = new_transaction_amounts
     t['new_mean_amount_per_day'] = new_mean_amount_per_day
     t['new_transaction_quantities'] = new_transaction_quantities

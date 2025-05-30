@@ -72,63 +72,43 @@ def get_mean_amount_per_day( \
     duration = (end_date - start_date).days
     for i in range(num_stocks):
         assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
+        num_transactions = len(transaction_dates[i])
         if transaction_dates[i] == []:
             mean_amount_per_day[i] = 0
             continue
         if i ==21:
             pass
-        # Find the last transaction date before or on the start date
-        num_transactions = len(transaction_dates[i])
-        index = min(1,num_transactions)
-        stop = False
-        while not stop:
-            if index >= num_transactions:
-                stop = True
-                last_transaction_index_before_or_on_start_date = 0
-            else:
-                if (transaction_dates[i][index] == start_date):
-                    stop = True
-                    last_transaction_index_before_or_on_start_date = index
-                elif (transaction_dates[i][index] > start_date):
-                    stop = True
-                    last_transaction_index_before_or_on_start_date = index - 1
-                else:
-                    index = index + 1
-        first_transaction_index_after_start_date = min(last_transaction_index_before_or_on_start_date + 1,num_transactions-1)
-        
-        if i==21:
-            pass
-        # Find the last transaction date before or on the end date
-        index = min(1,num_transactions)
-        stop = False
-        while not stop:
-            if index >= num_transactions:
-                stop = True
-                last_transaction_index_before_or_on_end_date = num_transactions - 1
-            else:
-                if (transaction_dates[i][index] == end_date):
-                    stop = True
-                    last_transaction_index_before_or_on_end_date = index
-                elif (transaction_dates[i][index] > end_date):
-                    stop = True
-                    last_transaction_index_before_or_on_end_date = index - 1
-                else:
-                    index = index + 1
 
-        # Four intervals
-        # 1. [last_transaction_date_before_or_on_start_date, start_date]
-        # 2. [start_date, first_transaction_date_after_start_date]
-        # 3. [first_transaction_date_after_start_date, last_transaction_date_before_or_on_end_date]
-        # 4. [last_transaction_date_before_or_on_end_date, end_date]
-        last_transaction_date_before_or_on_start_date = transaction_dates[i][last_transaction_index_before_or_on_start_date]
-        
-        if last_transaction_date_before_or_on_start_date == start_date:
-            start_index = last_transaction_index_before_or_on_start_date
-        else:
-            start_index = first_transaction_index_after_start_date
-        
-        cum_amount_added_from_start_to_end = np.cumsum(transaction_amounts[i][start_index:(last_transaction_index_before_or_on_end_date+1)])
-        start_to_end_transaction_dates = transaction_dates[i][start_index:(last_transaction_index_before_or_on_end_date+1)]
+        # Find first transaction on or after the start date
+        first_transaction_index_on_or_after_start_date = 0
+        stop = False
+        while not stop:
+            if first_transaction_index_on_or_after_start_date == num_transactions:
+                stop = True
+            else:
+                if (transaction_dates[i][first_transaction_index_on_or_after_start_date] < start_date):
+                    first_transaction_index_on_or_after_start_date = first_transaction_index_on_or_after_start_date + 1
+                else:
+                    stop = True
+
+        # Find last transaction before or on end date
+        index = first_transaction_index_on_or_after_start_date
+        stop = False
+        while not stop:
+            if index == num_transactions:
+                stop = True
+            else:
+                if (transaction_dates[i][index] > end_date):
+                    stop = True
+                else:
+                    index = index + 1
+        last_transaction_index_before_or_on_end_date = index - 1
+
+        start_index = max(0,min(num_transactions-1,first_transaction_index_on_or_after_start_date))
+        end_index = max(0,min(num_transactions-1,last_transaction_index_before_or_on_end_date))
+
+        cum_amount_added_from_start_to_end = np.cumsum(transaction_amounts[i][start_index:(end_index+1)])
+        start_to_end_transaction_dates = transaction_dates[i][start_index:(end_index+1)]
         if len(start_to_end_transaction_dates) > 0:
             if i==21:
                 pass

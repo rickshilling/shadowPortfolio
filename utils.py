@@ -13,9 +13,14 @@ def get_shadow_transactions(all_transactions, shadow):
         transaction_dates = []
         for _, transaction_row in all_transactions.iterrows():
             if ticker == transaction_row['Symbol'] or ticker == transaction_row['TransactionType']:
-                transaction_amounts.append(-transaction_row['Amount'])
-                transaction_quantities.append(abs(transaction_row['Quantity']))
-                transaction_dates.append(transaction_row['TransactionDate'].to_pydatetime().date())
+                transaction_amount = transaction_row['Quantity'] * transaction_row['Price']
+                # transaction_amounts.append(-transaction_row['Amount'])
+                if abs(transaction_amount) > 1e-3: 
+                    transaction_amounts.append(transaction_amount)
+                    transaction_quantities.append(abs(transaction_row['Quantity']))
+                    transaction_dates.append(transaction_row['TransactionDate'].to_pydatetime().date())
+        if ticker == "PANL":
+            pass
         t[ticker] = dict()
         t[ticker]['CurrentPrice($)'] = shadow_row['CurrentPrice($)']
         t[ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']
@@ -70,7 +75,7 @@ def get_mean_amount_per_day( \
         if transaction_dates[i] == []:
             mean_amount_per_day[i] = 0
             continue
-        if i ==17:
+        if i ==21:
             pass
         # Find the last transaction date before or on the start date
         num_transactions = len(transaction_dates[i])
@@ -91,7 +96,7 @@ def get_mean_amount_per_day( \
                     index = index + 1
         first_transaction_index_after_start_date = min(last_transaction_index_before_or_on_start_date + 1,num_transactions-1)
         
-        if i==17:
+        if i==21:
             pass
         # Find the last transaction date before or on the end date
         index = min(1,num_transactions)
@@ -116,8 +121,6 @@ def get_mean_amount_per_day( \
         # 3. [first_transaction_date_after_start_date, last_transaction_date_before_or_on_end_date]
         # 4. [last_transaction_date_before_or_on_end_date, end_date]
         last_transaction_date_before_or_on_start_date = transaction_dates[i][last_transaction_index_before_or_on_start_date]
-        first_transaction_date_after_start_date = transaction_dates[i][first_transaction_index_after_start_date]
-        last_transaction_date_before_or_on_end_date = transaction_dates[i][last_transaction_index_before_or_on_end_date]
         
         if last_transaction_date_before_or_on_start_date == start_date:
             start_index = last_transaction_index_before_or_on_start_date
@@ -127,7 +130,7 @@ def get_mean_amount_per_day( \
         cum_amount_added_from_start_to_end = np.cumsum(transaction_amounts[i][start_index:(last_transaction_index_before_or_on_end_date+1)])
         start_to_end_transaction_dates = transaction_dates[i][start_index:(last_transaction_index_before_or_on_end_date+1)]
         if len(start_to_end_transaction_dates) > 0:
-            if i==17:
+            if i==21:
                 pass
             date_differences = np.diff(start_to_end_transaction_dates)
             day_differences = [x.days for x in date_differences]

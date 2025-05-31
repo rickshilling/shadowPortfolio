@@ -23,15 +23,12 @@ def minimize_variance_of_new_amount_per_day(
         new_transaction_quantities[min_index] = new_transaction_quantities[min_index] + 1
         remaining_amount = remaining_amount - t['CurrentPrice($)'][min_index]
         new_transaction_amount = new_transaction_quantities * t['CurrentPrice($)']
-        # new_transaction_amounts = t['transaction_amounts']
         new_transaction_amounts = copy.deepcopy(t['transaction_amounts'])
         for i in range(t['num_stocks']):
             if i == 6:
                 pass
             new_transaction_amounts[i].append(new_transaction_amount[i])
-            # print(new_transaction_amounts[i][-1])
         new_amount_per_day = get_amount_per_day( new_transaction_amounts, new_transaction_dates, end_date, start_date=start_date)
-        # print(new_amount_per_day[min_index])
     t['new_transaction_amounts'] = new_transaction_amounts
     t['new_amount_per_day'] = new_amount_per_day
     t['new_transaction_quantities'] = new_transaction_quantities

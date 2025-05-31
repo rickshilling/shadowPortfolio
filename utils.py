@@ -76,8 +76,6 @@ def get_amount_per_day( \
         if transaction_dates[i] == []:
             amount_per_day[i] = 0
             continue
-        if i ==6:
-            pass
 
         # Find first transaction on or after the start date
         first_transaction_index_on_or_after_start_date = 0

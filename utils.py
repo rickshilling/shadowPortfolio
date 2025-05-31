@@ -59,7 +59,7 @@ def refactor_transactions(t): #(t)ransactions
     nt['num_stocks'] = len(t.keys())
     return nt
 
-def get_mean_amount_per_day( \
+def get_amount_per_day( \
             transaction_amounts:dict, \
             transaction_dates:dict, \
             end_date:date,
@@ -67,14 +67,14 @@ def get_mean_amount_per_day( \
             eps=1e-6
             ):
     num_stocks = len(transaction_amounts.keys())
-    mean_amount_per_day = np.zeros((num_stocks,))
+    amount_per_day = np.zeros((num_stocks,))
     assert(start_date <= end_date)
     duration = (end_date - start_date).days
     for i in range(num_stocks):
         assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
         num_transactions = len(transaction_dates[i])
         if transaction_dates[i] == []:
-            mean_amount_per_day[i] = 0
+            amount_per_day[i] = 0
             continue
         if i ==15:
             pass
@@ -108,7 +108,7 @@ def get_mean_amount_per_day( \
         end_index = max(0,min(num_transactions-1,last_transaction_index_before_or_on_end_date))
 
         transaction_sum = np.sum(transaction_amounts[i][start_index:(end_index+1)])
-        mean_amount_per_day[i] = transaction_sum/duration
+        amount_per_day[i] = transaction_sum/duration
         # cum_amount_added_from_start_to_end = np.cumsum(transaction_amounts[i][start_index:(end_index+1)])
         # start_to_end_transaction_dates = transaction_dates[i][start_index:(end_index+1)]
         # if len(start_to_end_transaction_dates) > 0:
@@ -122,14 +122,14 @@ def get_mean_amount_per_day( \
         #     transaction_amounts_day_product = cum_amount_added_from_start_to_end * day_differences #($)*(day)
         #     total_transaction_amounts_day_product = np.sum(transaction_amounts_day_product) #($)*(day)
         #     mean_amount = total_transaction_amounts_day_product / duration #($)
-        #     mean_amount_per_day[i] = mean_amount/duration
+        #     amount_per_day[i] = mean_amount/duration
         # else:
-        #     mean_amount_per_day[i] = 0
-    return mean_amount_per_day
+        #     amount_per_day[i] = 0
+    return amount_per_day
 
-def set_mean_amount_per_day(t, end_date, start_date): #(t)ransactions
-    mean_amount_per_day = get_mean_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date, start_date)
-    t['mean_amount_per_day'] = mean_amount_per_day
+def set_amount_per_day(t, end_date, start_date): #(t)ransactions
+    amount_per_day = get_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date, start_date)
+    t['amount_per_day'] = amount_per_day
     return t
 
 def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions

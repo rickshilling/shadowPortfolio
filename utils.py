@@ -2,13 +2,15 @@ import numpy as np
 from datetime import date
 from typing import List
 
-def get_shadow_transactions(all_transactions, shadow):
+def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude):
     # Sign Convention: 
     #   If I buy then transaction_amounts is positive and transaction_quantities is positive
     #   If I sell then transaction_amounts is negative and transaction_quantities is positive
     t = dict() #(t)ransactions
     for shadow_index, shadow_row in shadow.iterrows():
         ticker = shadow_row['Ticker'].replace("*","")
+        if ticker in stocks_to_exclude:
+            continue
         transaction_amounts = []
         transaction_quantities = []
         transaction_dates = []
@@ -20,8 +22,6 @@ def get_shadow_transactions(all_transactions, shadow):
                     transaction_amounts.append(transaction_amount)
                     transaction_quantities.append(abs(transaction_row['Quantity']))
                     transaction_dates.append(transaction_row['TransactionDate'].to_pydatetime().date())
-        if ticker == "PANL":
-            pass
         t[ticker] = dict()
         t[ticker]['CurrentPrice($)'] = shadow_row['CurrentPrice($)']
         t[ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']
@@ -64,14 +64,14 @@ def get_amount_per_day( \
             transaction_amounts:dict, \
             transaction_dates:dict, \
             end_date:date,
-            start_date:date, \
+            start_dates, \
             eps=1e-6
             ):
     num_stocks = len(transaction_amounts.keys())
     amount_per_day = np.zeros((num_stocks,))
-    assert(start_date <= end_date)
-    duration = (end_date - start_date).days
+    # assert(start_date <= end_date)
     for i in range(num_stocks):
+        duration = (end_date - start_dates[i]).days
         assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
         num_transactions = len(transaction_dates[i])
         if transaction_dates[i] == []:
@@ -85,7 +85,7 @@ def get_amount_per_day( \
             if first_transaction_index_on_or_after_start_date == num_transactions:
                 stop = True
             else:
-                if (transaction_dates[i][first_transaction_index_on_or_after_start_date] < start_date):
+                if (transaction_dates[i][first_transaction_index_on_or_after_start_date] < start_dates[i]):
                     first_transaction_index_on_or_after_start_date = first_transaction_index_on_or_after_start_date + 1
                 else:
                     stop = True
@@ -110,63 +110,63 @@ def get_amount_per_day( \
         amount_per_day[i] = transaction_sum/duration
     return amount_per_day
 
-def get_amount_per_day2(t):
-            # transaction_amounts:dict, \
-            # transaction_dates:dict, \
-            # end_date:date,
-            # start_dates:dict, \
-            # eps=1e-6
-            # ):
-    num_stocks = len(t.keys())
-    amount_per_day = np.zeros((num_stocks,))
-    durations = {}
-    for i in range(num_stocks):
-        if t['good_standing'][i]:
+# def get_amount_per_day2(t, end_date):
+#     num_stocks = t['num_stocks']
+#     amount_per_day = np.zeros((num_stocks,))
+#     durations = {}
+#     transaction_dates = t['transaction_dates']
+#     transaction_amounts = t['transaction_amounts']
+#     for i in range(num_stocks):
+#         if t['good_standing'][i]:
+#             start_date = t['transaction_dates'][i][0]
+#             durations[i] = (end_date - start_date).days
+#             assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
+#             num_transactions = len(transaction_dates[i])
+#             if transaction_dates[i] == []:
+#                 amount_per_day[i] = 0
+#                 continue
 
-            assert(start_dates[i] <= end_date)
-            durations[i] = (end_date - start_dates[i]).days
-            assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
-            num_transactions = len(transaction_dates[i])
-            if transaction_dates[i] == []:
-                amount_per_day[i] = 0
-                continue
+#             # Find first transaction on or after the start date
+#             first_transaction_index_on_or_after_start_date = 0
+#             stop = False
+#             while not stop:
+#                 if first_transaction_index_on_or_after_start_date == num_transactions:
+#                     stop = True
+#                 else:
+#                     if (transaction_dates[i][first_transaction_index_on_or_after_start_date] < start_date):
+#                         first_transaction_index_on_or_after_start_date = first_transaction_index_on_or_after_start_date + 1
+#                     else:
+#                         stop = True
 
-            # Find first transaction on or after the start date
-            first_transaction_index_on_or_after_start_date = 0
-            stop = False
-            while not stop:
-                if first_transaction_index_on_or_after_start_date == num_transactions:
-                    stop = True
-                else:
-                    if (transaction_dates[i][first_transaction_index_on_or_after_start_date] < start_dates[i]):
-                        first_transaction_index_on_or_after_start_date = first_transaction_index_on_or_after_start_date + 1
-                    else:
-                        stop = True
+#             # Find last transaction before or on end date
+#             index = first_transaction_index_on_or_after_start_date
+#             stop = False
+#             while not stop:
+#                 if index == num_transactions:
+#                     stop = True
+#                 else:
+#                     if (transaction_dates[i][index] > end_date):
+#                         stop = True
+#                     else:
+#                         index = index + 1
+#             last_transaction_index_before_or_on_end_date = max(0,index - 1)
 
-            # Find last transaction before or on end date
-            index = first_transaction_index_on_or_after_start_date
-            stop = False
-            while not stop:
-                if index == num_transactions:
-                    stop = True
-                else:
-                    if (transaction_dates[i][index] > end_date):
-                        stop = True
-                    else:
-                        index = index + 1
-            last_transaction_index_before_or_on_end_date = max(0,index - 1)
+#             start_index = max(0,min(num_transactions-1,first_transaction_index_on_or_after_start_date))
+#             end_index = max(0,min(num_transactions-1,last_transaction_index_before_or_on_end_date))
 
-            start_index = max(0,min(num_transactions-1,first_transaction_index_on_or_after_start_date))
-            end_index = max(0,min(num_transactions-1,last_transaction_index_before_or_on_end_date))
+#             transaction_sum = np.sum(transaction_amounts[i][start_index:(end_index+1)])
+#             amount_per_day[i] = transaction_sum/durations[i]
+#     return amount_per_day
 
-            transaction_sum = np.sum(transaction_amounts[i][start_index:(end_index+1)])
-            amount_per_day[i] = transaction_sum/durations[i]
-    return amount_per_day
-
-def set_amount_per_day(t, end_date, start_date): #(t)ransactions
-    amount_per_day = get_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date, start_date)
+def set_amount_per_day(t, end_date, start_dates): #(t)ransactions
+    amount_per_day = get_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date, start_dates)
     t['amount_per_day'] = amount_per_day
     return t
+
+# def set_amount_per_day2(t, end_date): #(t)ransactions
+#     amount_per_day = get_amount_per_day2(t, end_date)
+#     t['amount_per_day'] = amount_per_day
+#     return t
 
 def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions
     t['current_total_value'] = dict()

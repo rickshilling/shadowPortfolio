@@ -110,63 +110,83 @@ def get_amount_per_day( \
         amount_per_day[i] = transaction_sum/duration
     return amount_per_day
 
-# def get_amount_per_day2(t, end_date):
-#     num_stocks = t['num_stocks']
-#     amount_per_day = np.zeros((num_stocks,))
-#     durations = {}
-#     transaction_dates = t['transaction_dates']
-#     transaction_amounts = t['transaction_amounts']
-#     for i in range(num_stocks):
-#         if t['good_standing'][i]:
-#             start_date = t['transaction_dates'][i][0]
-#             durations[i] = (end_date - start_date).days
-#             assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
-#             num_transactions = len(transaction_dates[i])
-#             if transaction_dates[i] == []:
-#                 amount_per_day[i] = 0
-#                 continue
+def get_weighted_amount_per_day( \
+            transaction_amounts:dict, \
+            transaction_dates:dict, \
+            end_date:date,
+            start_dates, \
+            tau = 1e0,\
+            eps=1e-6
+            ):
+    # We want the amount bought per day to be the same between any two stocks. 
+    # This means, 
+    #   if stocks x,y owned for time T(x)>T(y) have amounts A(x)>A(y)
+    #   then the amounts per day A(x)/T(x)=A(y)/T(y).    
+    # However, we also prefer to have newly owned stocks to have a catch-up period.  
+    # So we weigh down longer owned stocks versus shorted owned stocks.  
+    # This means, we need to introduce W()>0 such that 
+    #     W(x)A(x)/T(x)<W(y)A(y)/T(y) => W(x)<W(y).
+    # We also want some additional properties.  
+    # As time increases we want to diminish the weight.  
+    # This means for stocks x,y,z, T(x)>T(y)>T(z)
+    #   if (T(x)-T(y)) = (T(y)-T(z)) then W(x) < W(y) < W(z).
+    # Start with W(.) to be a function of time:
+    #   W(t)=1-exp(-t/tau) => W(x) = 1-exp(-T(x)/tau)
 
-#             # Find first transaction on or after the start date
-#             first_transaction_index_on_or_after_start_date = 0
-#             stop = False
-#             while not stop:
-#                 if first_transaction_index_on_or_after_start_date == num_transactions:
-#                     stop = True
-#                 else:
-#                     if (transaction_dates[i][first_transaction_index_on_or_after_start_date] < start_date):
-#                         first_transaction_index_on_or_after_start_date = first_transaction_index_on_or_after_start_date + 1
-#                     else:
-#                         stop = True
+    num_stocks = len(transaction_amounts.keys())
+    amount_per_day = np.zeros((num_stocks,))
+    # assert(start_date <= end_date)
+    for i in range(num_stocks):
+        duration = (end_date - start_dates[i]).days
+        assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
+        num_transactions = len(transaction_dates[i])
+        if transaction_dates[i] == []:
+            amount_per_day[i] = 0
+            continue
 
-#             # Find last transaction before or on end date
-#             index = first_transaction_index_on_or_after_start_date
-#             stop = False
-#             while not stop:
-#                 if index == num_transactions:
-#                     stop = True
-#                 else:
-#                     if (transaction_dates[i][index] > end_date):
-#                         stop = True
-#                     else:
-#                         index = index + 1
-#             last_transaction_index_before_or_on_end_date = max(0,index - 1)
+        # Find first transaction on or after the start date
+        first_transaction_index_on_or_after_start_date = 0
+        stop = False
+        while not stop:
+            if first_transaction_index_on_or_after_start_date == num_transactions:
+                stop = True
+            else:
+                if (transaction_dates[i][first_transaction_index_on_or_after_start_date] < start_dates[i]):
+                    first_transaction_index_on_or_after_start_date = first_transaction_index_on_or_after_start_date + 1
+                else:
+                    stop = True
 
-#             start_index = max(0,min(num_transactions-1,first_transaction_index_on_or_after_start_date))
-#             end_index = max(0,min(num_transactions-1,last_transaction_index_before_or_on_end_date))
+        # Find last transaction before or on end date
+        index = first_transaction_index_on_or_after_start_date
+        stop = False
+        while not stop:
+            if index == num_transactions:
+                stop = True
+            else:
+                if (transaction_dates[i][index] > end_date):
+                    stop = True
+                else:
+                    index = index + 1
+        last_transaction_index_before_or_on_end_date = max(0,index - 1)
 
-#             transaction_sum = np.sum(transaction_amounts[i][start_index:(end_index+1)])
-#             amount_per_day[i] = transaction_sum/durations[i]
-#     return amount_per_day
+        start_index = max(0,min(num_transactions-1,first_transaction_index_on_or_after_start_date))
+        end_index = max(0,min(num_transactions-1,last_transaction_index_before_or_on_end_date))
+
+        transaction_sum = np.sum(transaction_amounts[i][start_index:(end_index+1)])
+        weight = 1-np.exp(-duration/365/tau)
+        amount_per_day[i] = weight*transaction_sum/duration
+    return amount_per_day
 
 def set_amount_per_day(t, end_date, start_dates): #(t)ransactions
     amount_per_day = get_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date, start_dates)
     t['amount_per_day'] = amount_per_day
     return t
 
-# def set_amount_per_day2(t, end_date): #(t)ransactions
-#     amount_per_day = get_amount_per_day2(t, end_date)
-#     t['amount_per_day'] = amount_per_day
-#     return t
+def set_weighted_amount_per_day(t, end_date, start_dates, tau=1e0): #(t)ransactions
+    amount_per_day = get_weighted_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date, start_dates, tau)
+    t['amount_per_day'] = amount_per_day
+    return t
+
 
 def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions
     t['current_total_value'] = dict()

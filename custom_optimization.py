@@ -1,14 +1,15 @@
 import numpy as np
-from utils import get_amount_per_day
+from utils import get_amount_per_day, get_weighted_amount_per_day
 from datetime import date
 import copy
 
-def minimize_variance_of_new_amount_per_day(
+def minimize_variance_of_new_weighted_amount_per_day(
         t, #(t)ransactions 
         end_date, 
         new_transaction_date,
         start_dates,
         limit = 27*7, 
+        tau = 1e0,
         eps=1e-6): 
     new_amount_per_day = t['amount_per_day']
     (good_standing_indices, ) = np.where(t['good_standing']>eps)
@@ -26,7 +27,7 @@ def minimize_variance_of_new_amount_per_day(
         new_transaction_amounts = copy.deepcopy(t['transaction_amounts'])
         for i in range(t['num_stocks']):
             new_transaction_amounts[i].append(new_transaction_amount[i])
-        new_amount_per_day = get_amount_per_day( new_transaction_amounts, new_transaction_dates, end_date, start_dates=start_dates)
+        new_amount_per_day = get_weighted_amount_per_day( new_transaction_amounts, new_transaction_dates, end_date, start_dates=start_dates, tau=tau)
     t['new_transaction_amounts'] = new_transaction_amounts
     t['new_amount_per_day'] = new_amount_per_day
     t['new_transaction_quantities'] = new_transaction_quantities

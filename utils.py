@@ -2,7 +2,7 @@ import numpy as np
 from datetime import date
 from typing import List
 
-def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude):
+def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude=[]):
     # Sign Convention: 
     #   If I buy then transaction_amounts is positive and transaction_quantities is positive
     #   If I sell then transaction_amounts is negative and transaction_quantities is positive

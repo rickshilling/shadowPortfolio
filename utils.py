@@ -116,7 +116,7 @@ def get_weighted_amount_per_day( \
             end_date:date,
             start_dates, \
             tau = 1e0,\
-            eps=1e-6
+            eps=1e-6,
             ):
     # We want the amount bought per day to be the same between any two stocks. 
     # This means, 
@@ -222,3 +222,9 @@ def set_date_of_first_purchase(t):
         # else:
         #     t['date_of_first_purchase'][i] = []
     return t
+
+def get_tau(weight, duration_in_days):
+    # Solves for:
+    #  weight = 1 - exp(-duration_in_days/tau)
+    tau = -duration_in_days / np.log(1-weight)
+    return tau

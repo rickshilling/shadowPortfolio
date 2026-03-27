@@ -1,5 +1,5 @@
 import numpy as np
-from datetime import date
+from datetime import date, datetime
 from typing import List
 
 def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude=[]):
@@ -15,13 +15,19 @@ def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude=[]):
         transaction_quantities = []
         transaction_dates = []
         for _, transaction_row in all_transactions.iterrows():
-            if ticker == transaction_row['Symbol'] or ticker == transaction_row['TransactionType']:
-                transaction_amount = transaction_row['Quantity'] * transaction_row['Price']
+            if ticker == transaction_row['Symbol'] or ticker == transaction_row['Activity Type']:
+                transaction_amount = transaction_row['Quantity #'] * transaction_row['Price $']
                 # transaction_amounts.append(-transaction_row['Amount'])
                 if abs(transaction_amount) > 1e-3: 
                     transaction_amounts.append(transaction_amount)
-                    transaction_quantities.append(abs(transaction_row['Quantity']))
-                    transaction_dates.append(transaction_row['TransactionDate'].to_pydatetime().date())
+                    transaction_quantities.append(abs(transaction_row['Quantity #']))
+                    transaction_date_var = transaction_row['Transaction Date']
+                    if isinstance(transaction_date_var, str):
+                        dt_object = datetime.strptime(transaction_date_var, "%m/%d/%y")
+                        final_date = dt_object.date()
+                    else:
+                        final_date = transaction_date_var.date()#.to_pydatetime()
+                    transaction_dates.append(final_date)
         t[ticker] = dict()
         t[ticker]['CurrentPrice($)'] = shadow_row['CurrentPrice($)']
         t[ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']

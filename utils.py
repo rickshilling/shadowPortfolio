@@ -40,6 +40,37 @@ def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude=[]):
     t = refactor_transactions(t)
     return t
 
+def get_transactions_from_deleted_stocks(all_transactions, deleted_stock_list):
+    t = dict() #(t)ransactions
+    for deleted_ticker in deleted_stock_list:
+        transaction_amounts = []
+        for _, transaction_row in all_transactions.iterrows():
+            if deleted_ticker == transaction_row['Symbol'] or deleted_ticker == transaction_row['Activity Type']:
+                transaction_amount = transaction_row['Quantity #'] * transaction_row['Price $']
+                if abs(transaction_amount) > 1e-3: 
+                    transaction_amounts.append(transaction_amount)
+        t[deleted_ticker] = dict()
+        sell_amount = 0
+        cost_basis = 0
+        for amount in transaction_amounts:
+            if amount < 0:
+                sell_amount = sell_amount + np.abs(amount)
+            else:
+                cost_basis = cost_basis + amount
+        t[deleted_ticker]['sell_amount'] = sell_amount
+        t[deleted_ticker]['cost_basis'] = cost_basis
+    nt = dict() #(n)ew (t)ransactions
+    num_stocks = len(t.keys())
+    nt['ticker'] = dict()
+    nt['sell_amount'] = np.zeros((num_stocks,))
+    nt['cost_basis'] = np.zeros((num_stocks,))
+    nt['num_stocks'] = num_stocks
+    for i, ticker in enumerate(t.keys()):
+        nt['sell_amount'][i] = t[ticker]['sell_amount'] 
+        nt['cost_basis'][i] = t[ticker]['cost_basis']
+        nt['ticker'][i] = ticker
+    return nt
+
 def refactor_transactions(t): #(t)ransactions
     nt = dict() #(n)ew (t)ransactions
     num_stocks = len(t.keys())
@@ -234,3 +265,13 @@ def get_tau(weight, duration_in_days):
     #  weight = 1 - exp(-duration_in_days/tau)
     tau = -duration_in_days / np.log(1-weight)
     return tau
+
+def read_tickers_from_text(filename):
+    tickers = []
+    with open(filename, 'r') as file:
+        for line in file:
+            # .strip() removes whitespace and newline characters
+            symbol = line.strip()
+            if symbol:  # This skips any empty lines
+                tickers.append(symbol)
+    return tickers

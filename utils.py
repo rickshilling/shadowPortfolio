@@ -275,3 +275,16 @@ def read_tickers_from_text(filename):
             if symbol:  # This skips any empty lines
                 tickers.append(symbol)
     return tickers
+
+def filter_transaction_history(transaction_history, shadow, deleted_shadow_stocks):
+    # Extract valid tickers from shadow, removing any '*' character
+    shadow_tickers = {t.replace("*", "") for t in shadow['Ticker']}
+    # Combine with deleted tickers
+    valid_tickers = shadow_tickers.union(set(deleted_shadow_stocks))
+    
+    # Filter the transaction history where either 'Symbol' or 'Activity Type' matches
+    is_valid = transaction_history['Symbol'].isin(valid_tickers) | \
+               transaction_history['Activity Type'].isin(valid_tickers)
+    
+    new_transaction_history = transaction_history[is_valid].copy()
+    return new_transaction_history

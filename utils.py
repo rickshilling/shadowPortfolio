@@ -28,6 +28,8 @@ def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude=[]):
                     else:
                         final_date = transaction_date_var.date()#.to_pydatetime()
                     transaction_dates.append(final_date)
+        if transaction_dates == []:
+            continue
         t[ticker] = dict()
         t[ticker]['CurrentPrice($)'] = shadow_row['CurrentPrice($)']
         t[ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']

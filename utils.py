@@ -1,6 +1,7 @@
 import numpy as np
 from datetime import date, datetime
 from typing import List
+from scipy.optimize import least_squares
 
 def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude=[]):
     # Sign Convention: 
@@ -226,6 +227,48 @@ def set_weighted_amount_per_day(t, end_date, start_dates, tau=1e0): #(t)ransacti
     t['amount_per_day'] = amount_per_day
     return t
 
+def set_effective_annual_rate_of_return(t, current_date=None):
+    """
+    Calculates the effective annual rate of return (r_eff) for each stock.
+    Solves for r_eff in: Current Value = Sum [ Transaction_Amount_i * (1 + r_eff)^t_i ]
+    where t_i is the time in years from the transaction date to the current date.
+    """
+    """
+    I want the effective annual rate of return for each stock in shadow_transactions.  
+    Each stock has a transaction list with a given date & amount sold or bought.  
+    A stock at the  i^{th} transaction at time t_i is bought for c_i.  
+    Then, if now is t=0 and its value is now v_i, then it has a return, r_i, such that v_i = c_i*(1+r_i)^{t_i}.  
+    Given that there a list of transaction for each stock, the total value is Sum_{i=1}^{n}v_i.  
+    Replacing each r_{i} with one effective rate r_{eff} and 
+    also allow for selling a stock, also noted at c_i, we now have the recusrive relation 
+    v_{i+1}=(v_i+c_{i+1})*(1+r_{eff})^(t_i-t_{i+1}).  
+    Write the code the does a nonlinear squares estimate of finding 
+    r_{eff} based on this relation and using the shadow transactions
+    """
+    if current_date is None:
+        current_date = date.today()
+
+    t['effective_annual_rate_of_return'] = np.zeros((t['num_stocks'],))
+
+    for i in range(t['num_stocks']):
+        amounts = np.array(t['transaction_amounts'][i])
+        dates = t['transaction_dates'][i]
+        
+        # durations (t_i) in years from transaction date to current_date
+        durations = np.array([(current_date - d).days / 365.25 for d in dates])
+        current_val = t.get('current_total_value', {}).get(i, 0.0)
+
+        def residual(r_arr):
+            r = r_arr[0]
+            # Vectorized calculation of predicted future value
+            # np.maximum ensures the base is positive for fractional exponents
+            predicted = np.sum(amounts * np.power(np.maximum(1.0 + r, 1e-9), durations))
+            return [predicted - current_val]
+
+        # x0=0.1 (10% return) is the initial guess; bounds prevent math errors
+        res = least_squares(residual, x0=[0.1], bounds=(-0.999, 100.0))
+        t['effective_annual_rate_of_return'][i] = res.x[0]
+    return t
 
 def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions
     t['current_total_value'] = dict()

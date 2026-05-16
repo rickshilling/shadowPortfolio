@@ -270,6 +270,41 @@ def set_effective_annual_rate_of_return(t, current_date=None):
         t['effective_annual_rate_of_return'][i] = res.x[0]
     return t
 
+def set_total_effective_annual_rate_of_return(t, current_date=None):
+    """
+    Calculates the effective annual rate of return (r_eff) for the entire portfolio.
+    Aggregates all transactions across all stocks and solves for a single global r_eff.
+    """
+    if current_date is None:
+        current_date = date.today()
+
+    all_amounts = []
+    all_durations = []
+    total_current_value = 0.0
+
+    for i in range(t['num_stocks']):
+        amounts = t['transaction_amounts'][i]
+        dates = t['transaction_dates'][i]
+        
+        # durations (t_i) in years from transaction date to current_date
+        durations = [(current_date - d).days / 365.25 for d in dates]
+        
+        all_amounts.extend(amounts)
+        all_durations.extend(durations)
+        total_current_value += t.get('current_total_value', {}).get(i, 0.0)
+
+    all_amounts = np.array(all_amounts)
+    all_durations = np.array(all_durations)
+
+    def residual(r_arr):
+        r = r_arr[0]
+        predicted = np.sum(all_amounts * np.power(np.maximum(1.0 + r, 1e-9), all_durations))
+        return [predicted - total_current_value]
+
+    res = least_squares(residual, x0=[0.1], bounds=(-0.999, 100.0))
+    t['total_effective_annual_rate_of_return'] = res.x[0]
+    return t
+
 def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions
     t['current_total_value'] = dict()
     t['cost_basis'] = dict()

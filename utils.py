@@ -24,7 +24,10 @@ def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude=[]):
                     transaction_quantities.append(abs(transaction_row['Quantity #']))
                     transaction_date_var = transaction_row['Transaction Date']
                     if isinstance(transaction_date_var, str):
-                        dt_object = datetime.strptime(transaction_date_var, "%m/%d/%y")
+                        try:
+                            dt_object = datetime.strptime(transaction_date_var, "%m/%d/%Y")
+                        except ValueError:
+                            dt_object = datetime.strptime(transaction_date_var, "%m/%d/%y")
                         final_date = dt_object.date()
                     else:
                         final_date = transaction_date_var.date()#.to_pydatetime()

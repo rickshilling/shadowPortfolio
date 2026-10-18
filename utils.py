@@ -1,373 +1,290 @@
+import pandas as pd
 import numpy as np
-from datetime import date, datetime
-from typing import List
-from scipy.optimize import least_squares
+from scipy.optimize import fsolve
 
-def get_shadow_transactions(all_transactions, shadow, stocks_to_exclude=[]):
-    # Sign Convention: 
-    #   If I buy then transaction_amounts is positive and transaction_quantities is positive
-    #   If I sell then transaction_amounts is negative and transaction_quantities is positive
-    t = dict() #(t)ransactions
-    for shadow_index, shadow_row in shadow.iterrows():
-        ticker = shadow_row['Ticker'].replace("*","")
-        if ticker in stocks_to_exclude:
-            continue
-        transaction_amounts = []
-        transaction_quantities = []
-        transaction_dates = []
-        for _, transaction_row in all_transactions.iterrows():
-            if ticker == transaction_row['Symbol'] or ticker == transaction_row['Activity Type']:
-                transaction_amount = transaction_row['Quantity #'] * transaction_row['Price $']
-                # transaction_amounts.append(-transaction_row['Amount'])
-                if abs(transaction_amount) > 1e-3: 
-                    transaction_amounts.append(transaction_amount)
-                    transaction_quantities.append(abs(transaction_row['Quantity #']))
-                    transaction_date_var = transaction_row['Transaction Date']
-                    if isinstance(transaction_date_var, str):
-                        try:
-                            dt_object = datetime.strptime(transaction_date_var, "%m/%d/%Y")
-                        except ValueError:
-                            dt_object = datetime.strptime(transaction_date_var, "%m/%d/%y")
-                        final_date = dt_object.date()
-                    else:
-                        final_date = transaction_date_var.date()#.to_pydatetime()
-                    transaction_dates.append(final_date)
-        if transaction_dates == []:
-            continue
-        t[ticker] = dict()
-        t[ticker]['CurrentPrice($)'] = shadow_row['CurrentPrice($)']
-        t[ticker]['Price-EarningsRatio(X)'] = shadow_row['Price-EarningsRatio(X)']
-        t[ticker]['Rel PriceStrgth(%)'] = shadow_row['Rel PriceStrgth(%)']
-        indices = np.argsort(transaction_dates) # Ensure oldest date first, most recent date last
-        t[ticker]['transaction_amounts'] = np.take(transaction_amounts, indices).tolist()
-        t[ticker]['transaction_quantities'] = np.take(transaction_quantities, indices).tolist()
-        t[ticker]['transaction_dates'] = np.take(transaction_dates, indices).tolist()
-        t[ticker]['Notes'] = str(shadow_row['Notes']) 
-    t = refactor_transactions(t)
-    return t
 
-def get_transactions_from_deleted_stocks(all_transactions, deleted_stock_list):
-    t = dict() #(t)ransactions
-    for deleted_ticker in deleted_stock_list:
-        transaction_amounts = []
-        for _, transaction_row in all_transactions.iterrows():
-            if deleted_ticker == transaction_row['Symbol'] or deleted_ticker == transaction_row['Activity Type']:
-                transaction_amount = transaction_row['Quantity #'] * transaction_row['Price $']
-                if abs(transaction_amount) > 1e-3: 
-                    transaction_amounts.append(transaction_amount)
-        t[deleted_ticker] = dict()
-        sell_amount = 0
-        cost_basis = 0
-        for amount in transaction_amounts:
-            if amount < 0:
-                sell_amount = sell_amount + np.abs(amount)
+def calculate_cost_basis_per_time(transactions, decay_rate=0.01):
+    """
+    Calculate cost basis per unit time for each stock.
+
+    Args:
+        transactions: DataFrame with transaction data including:
+            - Symbol: Stock ticker
+            - Activity Type: Type of transaction (e.g., 'Bought', 'Sell')
+            - Quantity #: Number of shares
+            - Amount $: Transaction amount
+            - Activity/Trade Date: Date of transaction
+        decay_rate: Rate for inverted exponential decay (default 0.01). Higher values give
+                   more weight to older transactions.
+
+    Returns:
+        DataFrame with columns:
+            - Ticker: Stock symbol
+            - Total Buy Cost: Total cost of all buy transactions
+            - Total Sell Proceeds: Total proceeds from all sell transactions
+            - Net Cost: Total buy cost - total sell proceeds
+            - Total Shares: Total shares bought
+            - Days Held: Number of days from first to last transaction
+            - Cost per Day: Net cost / days held
+            - Cost per Share-Day: Net cost / (shares * days)
+            - Weighted Cost per Day: Net cost with exponential decay weighting / days held
+    """
+    results = []
+
+    # Get present day (current date)
+    present_day = pd.Timestamp.now().normalize()
+
+    for ticker in transactions['Symbol'].unique():
+        stock_txns = transactions[transactions['Symbol'] == ticker].sort_values('Activity/Trade Date')
+
+        total_buy_cost = 0
+        total_sell_proceeds = 0
+        total_shares = 0
+        total_days = 0
+        weighted_net_cost = 0
+
+        for _, txn in stock_txns.iterrows():
+            activity = str(txn['Activity Type']).upper()
+            quantity = txn['Quantity #']
+            price = txn['Price $']
+            amount = txn['Amount $']
+            date = txn['Activity/Trade Date']
+
+            # Handle NaN values
+            if pd.isna(quantity) or pd.isna(amount):
+                continue
+
+            # Calculate days from present (time = 0 at present day)
+            days_ago = (present_day - date).days
+
+            # Calculate inverted exponential decay weight (older transactions get higher weight)
+            weight = 1 - np.exp(-decay_rate * days_ago)
+
+            if 'BOUGHT' in activity or 'BUY' in activity or 'OPEN' in activity:
+                # Buying shares - add to cost basis with weighting
+                total_buy_cost += abs(amount)
+                weighted_net_cost += abs(amount) * weight
+                total_shares += quantity
+            elif 'SELL' in activity or 'CLOSE' in activity:
+                # Selling shares - track proceeds with weighting
+                total_sell_proceeds += abs(amount)
+                weighted_net_cost -= abs(amount) * weight
+
+        # Calculate net cost (buys - sells)
+        net_cost = total_buy_cost - total_sell_proceeds
+
+        # Calculate total time period (from first buy to last transaction or current date)
+        if len(stock_txns) > 0:
+            first_date = stock_txns['Activity/Trade Date'].min()
+            last_date = stock_txns['Activity/Trade Date'].max()
+            total_days = (last_date - first_date).days
+
+            if total_days > 0 and total_shares > 0:
+                cost_per_day = net_cost / total_days
+                cost_per_share_day = net_cost / (total_shares * total_days)
+                weighted_cost_per_day = weighted_net_cost / total_days
+
+                results.append({
+                    'Ticker': ticker,
+                    'Total Buy Cost': total_buy_cost,
+                    'Total Sell Proceeds': total_sell_proceeds,
+                    'Net Cost': net_cost,
+                    'Total Shares': total_shares,
+                    'Days Held': total_days,
+                    'Cost per Day': cost_per_day,
+                    'Cost per Share-Day': cost_per_share_day,
+                    'Weighted Cost per Day': weighted_cost_per_day
+                })
+
+    return pd.DataFrame(results)
+
+
+def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, transactions_df, decay_rate=0.01, future_date=None):
+    """
+    Allocate weekly investment by buying shares of stocks with lowest weighted cost per day.
+    Updates weighted cost after each purchase to reflect new shares by recalculating from original transactions.
+
+    Args:
+        cost_basis_df: DataFrame from calculate_cost_basis_per_time with columns:
+            - Ticker: Stock symbol
+            - Weighted Cost per Day: Weighted cost metric
+            - Net Cost: Net cost of position
+            - Total Shares: Total shares owned
+            - Days Held: Number of days held
+        price_df: DataFrame with current prices including:
+            - Ticker: Stock symbol
+            - CurrentPrice($): Current stock price
+        weekly_new_amount: Total amount in dollars to invest
+        transactions_df: Original transaction DataFrame with columns:
+            - Symbol: Stock ticker
+            - Activity Type: Type of transaction
+            - Quantity #: Number of shares
+            - Amount $: Transaction amount
+            - Activity/Trade Date: Date of transaction
+        decay_rate: Decay rate for weighting (default 0.01)
+        future_date: Date to use as reference for decay calculations (default: current date)
+
+    Returns:
+        tuple: (allocation_df, updated_cost_basis_df)
+            - allocation_df: DataFrame with columns:
+                - Ticker: Stock symbol
+                - Shares to Buy: Number of shares to buy
+            - updated_cost_basis_df: DataFrame with updated weighted costs after all purchases
+    """
+    # Use future_date if provided, otherwise use current date
+    if future_date is None:
+        future_date = pd.Timestamp.now().normalize()
+    else:
+        future_date = pd.Timestamp(future_date).normalize()
+
+    # Create a mapping of ticker to current price
+    price_map = dict(zip(price_df['Ticker'], price_df['CurrentPrice($)']))
+
+    # Create a dictionary to track shares to buy for each stock
+    shares_to_buy = {ticker: 0 for ticker in cost_basis_df['Ticker']}
+
+    # Make a copy of cost_basis_df that we can modify
+    cost_basis_df = cost_basis_df.copy()
+
+    # Store original transactions for each ticker
+    ticker_transactions = {}
+    for ticker in cost_basis_df['Ticker']:
+        ticker_transactions[ticker] = transactions_df[transactions_df['Symbol'] == ticker].copy()
+
+    remaining_amount = weekly_new_amount
+
+    while remaining_amount > 0:
+        # Find the stock with the lowest weighted cost per day
+        min_weighted_cost_row = cost_basis_df.loc[cost_basis_df['Weighted Cost per Day'].idxmin()]
+        ticker = min_weighted_cost_row['Ticker']
+
+        # Get current price of this stock
+        current_price = price_map.get(ticker)
+
+        if current_price is None or pd.isna(current_price):
+            # Skip if price not available
+            cost_basis_df = cost_basis_df[cost_basis_df['Ticker'] != ticker]
+            if len(cost_basis_df) == 0:
+                break
+            continue
+
+        # Check if we can afford this stock
+        if current_price > remaining_amount:
+            # Can't afford this stock, skip it
+            cost_basis_df = cost_basis_df[cost_basis_df['Ticker'] != ticker]
+            if len(cost_basis_df) == 0:
+                break
+            continue
+
+        # Add 1 share to the allocation
+        shares_to_buy[ticker] += 1
+        remaining_amount -= current_price
+
+        # Add the new purchase to the transactions for this ticker
+        new_txn = pd.DataFrame([{
+            'Activity/Trade Date': future_date,
+            'Transaction Date': future_date,
+            'Settlement Date': future_date,
+            'Activity Type': 'Bought',
+            'Description': f'Weekly investment buy',
+            'Symbol': ticker,
+            'Cusip': '--',
+            'Quantity #': 1,
+            'Price $': current_price,
+            'Amount $': -current_price,
+            'Commission': 0.0,
+            'Category': '--',
+            'Note': '--'
+        }])
+        ticker_transactions[ticker] = pd.concat([ticker_transactions[ticker], new_txn], ignore_index=True)
+
+        # Recalculate weighted cost per day from scratch using all transactions
+        stock_txns = ticker_transactions[ticker].sort_values('Activity/Trade Date')
+
+        total_buy_cost = 0
+        total_sell_proceeds = 0
+        total_shares = 0
+        weighted_net_cost = 0
+
+        for _, txn in stock_txns.iterrows():
+            activity = str(txn['Activity Type']).upper()
+            quantity = txn['Quantity #']
+            amount = txn['Amount $']
+            date = txn['Activity/Trade Date']
+
+            # Handle NaN values
+            if pd.isna(quantity) or pd.isna(amount):
+                continue
+
+            # Calculate days from future_date
+            days_ago = (future_date - date).days
+
+            # Calculate inverted exponential decay weight
+            weight = 1 - np.exp(-decay_rate * days_ago)
+
+            if 'BOUGHT' in activity or 'BUY' in activity or 'OPEN' in activity:
+                total_buy_cost += abs(amount)
+                weighted_net_cost += abs(amount) * weight
+                total_shares += quantity
+            elif 'SELL' in activity or 'CLOSE' in activity:
+                total_sell_proceeds += abs(amount)
+                weighted_net_cost -= abs(amount) * weight
+
+        # Calculate net cost and weighted cost per day
+        net_cost = total_buy_cost - total_sell_proceeds
+
+        if len(stock_txns) > 0:
+            first_date = stock_txns['Activity/Trade Date'].min()
+            last_date = stock_txns['Activity/Trade Date'].max()
+            total_days = (last_date - first_date).days
+
+            if total_days > 0 and total_shares > 0:
+                weighted_cost_per_day = weighted_net_cost / total_days
             else:
-                cost_basis = cost_basis + amount
-        t[deleted_ticker]['sell_amount'] = sell_amount
-        t[deleted_ticker]['cost_basis'] = cost_basis
-    nt = dict() #(n)ew (t)ransactions
-    num_stocks = len(t.keys())
-    nt['ticker'] = dict()
-    nt['sell_amount'] = np.zeros((num_stocks,))
-    nt['cost_basis'] = np.zeros((num_stocks,))
-    nt['num_stocks'] = num_stocks
-    for i, ticker in enumerate(t.keys()):
-        nt['sell_amount'][i] = t[ticker]['sell_amount'] 
-        nt['cost_basis'][i] = t[ticker]['cost_basis']
-        nt['ticker'][i] = ticker
-    return nt
-
-def refactor_transactions(t): #(t)ransactions
-    nt = dict() #(n)ew (t)ransactions
-    num_stocks = len(t.keys())
-    nt['CurrentPrice($)'] = np.zeros((num_stocks,))
-    nt['Price-EarningsRatio(X)'] = np.zeros((num_stocks,))
-    nt['Notes'] = dict() 
-    nt['Rel PriceStrgth(%)'] = np.zeros((num_stocks,))
-    nt['transaction_amounts'] = dict()
-    nt['transaction_quantities'] = dict()
-    nt['transaction_dates'] = dict()
-    nt['ticker'] = dict()
-    for i, ticker in enumerate(t.keys()):
-        nt['CurrentPrice($)'][i] = t[ticker]['CurrentPrice($)']
-        if t[ticker]['Price-EarningsRatio(X)'] != 'nmf':
-            nt['Price-EarningsRatio(X)'][i] = t[ticker]['Price-EarningsRatio(X)']
+                weighted_cost_per_day = 0
         else:
-            nt['Price-EarningsRatio(X)'][i] = 0
-        nt['Rel PriceStrgth(%)'][i] = t[ticker]['Rel PriceStrgth(%)']
-        nt['transaction_amounts'][i] = t[ticker]['transaction_amounts']
-        nt['transaction_quantities'][i] = t[ticker]['transaction_quantities']
-        nt['transaction_dates'][i] = t[ticker]['transaction_dates']
-        nt['Notes'][i] = t[ticker]['Notes']
-        nt['ticker'][i] = ticker
-    nt['num_stocks'] = len(t.keys())
-    return nt
+            weighted_cost_per_day = 0
 
-def get_amount_per_day( \
-            transaction_amounts:dict, \
-            transaction_dates:dict, \
-            end_date:date,
-            start_dates, \
-            eps=1e-6
-            ):
-    num_stocks = len(transaction_amounts.keys())
-    amount_per_day = np.zeros((num_stocks,))
-    # assert(start_date <= end_date)
-    for i in range(num_stocks):
-        duration = (end_date - start_dates[i]).days
-        assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
-        num_transactions = len(transaction_dates[i])
-        if transaction_dates[i] == []:
-            amount_per_day[i] = 0
-            continue
+        # Update the DataFrame
+        idx = cost_basis_df[cost_basis_df['Ticker'] == ticker].index[0]
+        cost_basis_df.at[idx, 'Net Cost'] = net_cost
+        cost_basis_df.at[idx, 'Total Shares'] = total_shares
+        cost_basis_df.at[idx, 'Weighted Cost per Day'] = weighted_cost_per_day
 
-        # Find first transaction on or after the start date
-        first_transaction_index_on_or_after_start_date = 0
-        stop = False
-        while not stop:
-            if first_transaction_index_on_or_after_start_date == num_transactions:
-                stop = True
-            else:
-                if (transaction_dates[i][first_transaction_index_on_or_after_start_date] < start_dates[i]):
-                    first_transaction_index_on_or_after_start_date = first_transaction_index_on_or_after_start_date + 1
-                else:
-                    stop = True
+    # Convert to DataFrame
+    result_df = pd.DataFrame([
+        {'Ticker': ticker, 'Shares to Buy': shares}
+        for ticker, shares in shares_to_buy.items()
+        if shares > 0
+    ])
 
-        # Find last transaction before or on end date
-        index = first_transaction_index_on_or_after_start_date
-        stop = False
-        while not stop:
-            if index == num_transactions:
-                stop = True
-            else:
-                if (transaction_dates[i][index] > end_date):
-                    stop = True
-                else:
-                    index = index + 1
-        last_transaction_index_before_or_on_end_date = max(0,index - 1)
+    return result_df, cost_basis_df
 
-        start_index = max(0,min(num_transactions-1,first_transaction_index_on_or_after_start_date))
-        end_index = max(0,min(num_transactions-1,last_transaction_index_before_or_on_end_date))
 
-        transaction_sum = np.sum(transaction_amounts[i][start_index:(end_index+1)])
-        amount_per_day[i] = transaction_sum/duration
-    return amount_per_day
-
-def get_weighted_amount_per_day( \
-            transaction_amounts:dict, \
-            transaction_dates:dict, \
-            end_date:date,
-            start_dates, \
-            tau = 1e0,\
-            eps=1e-6,
-            ):
-    # We want the amount bought per day to be the same between any two stocks. 
-    # This means, 
-    #   if stocks x,y owned for time T(x)>T(y) have amounts A(x)>A(y)
-    #   then the amounts per day A(x)/T(x)=A(y)/T(y).    
-    # However, we also prefer to have newly owned stocks to have a catch-up period.  
-    # So we weigh down longer owned stocks versus shorted owned stocks.  
-    # This means, we need to introduce W()>0 such that 
-    #     W(x)A(x)/T(x)<W(y)A(y)/T(y) => W(x)<W(y).
-    # We also want some additional properties.  
-    # As time increases we want to diminish the weight.  
-    # This means for stocks x,y,z, T(x)>T(y)>T(z)
-    #   if (T(x)-T(y)) = (T(y)-T(z)) then W(x) < W(y) < W(z).
-    # Start with W(.) to be a function of time:
-    #   W(t)=1-exp(-t/tau) => W(x) = 1-exp(-T(x)/tau)
-
-    num_stocks = len(transaction_amounts.keys())
-    amount_per_day = np.zeros((num_stocks,))
-    # assert(start_date <= end_date)
-    for i in range(num_stocks):
-        duration = (end_date - start_dates[i]).days
-        assert(np.array_equal(np.sort(transaction_dates[i]),transaction_dates[i]))
-        num_transactions = len(transaction_dates[i])
-        if transaction_dates[i] == []:
-            amount_per_day[i] = 0
-            continue
-
-        # Find first transaction on or after the start date
-        first_transaction_index_on_or_after_start_date = 0
-        stop = False
-        while not stop:
-            if first_transaction_index_on_or_after_start_date == num_transactions:
-                stop = True
-            else:
-                if (transaction_dates[i][first_transaction_index_on_or_after_start_date] < start_dates[i]):
-                    first_transaction_index_on_or_after_start_date = first_transaction_index_on_or_after_start_date + 1
-                else:
-                    stop = True
-
-        # Find last transaction before or on end date
-        index = first_transaction_index_on_or_after_start_date
-        stop = False
-        while not stop:
-            if index == num_transactions:
-                stop = True
-            else:
-                if (transaction_dates[i][index] > end_date):
-                    stop = True
-                else:
-                    index = index + 1
-        last_transaction_index_before_or_on_end_date = max(0,index - 1)
-
-        start_index = max(0,min(num_transactions-1,first_transaction_index_on_or_after_start_date))
-        end_index = max(0,min(num_transactions-1,last_transaction_index_before_or_on_end_date))
-
-        transaction_sum = np.sum(transaction_amounts[i][start_index:(end_index+1)])
-        weight = 1-np.exp(-duration/365/tau)
-        amount_per_day[i] = weight*transaction_sum/duration
-    return amount_per_day
-
-def set_amount_per_day(t, end_date, start_dates): #(t)ransactions
-    amount_per_day = get_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date, start_dates)
-    t['amount_per_day'] = amount_per_day
-    return t
-
-def set_weighted_amount_per_day(t, end_date, start_dates, tau=1e0): #(t)ransactions
-    amount_per_day = get_weighted_amount_per_day( t['transaction_amounts'], t['transaction_dates'], end_date, start_dates, tau)
-    t['amount_per_day'] = amount_per_day
-    return t
-
-def set_effective_annual_rate_of_return(t, current_date=None):
+def get_decay_rate(t1, t2, difference):
     """
-    Calculates the effective annual rate of return (r_eff) for each stock.
-    Solves for r_eff in: Current Value = Sum [ Transaction_Amount_i * (1 + r_eff)^t_i ]
-    where t_i is the time in years from the transaction date to the current date.
+    Estimate the decay rate d based on the constraint:
+    (1 - exp(-d*t2)) - (1 - exp(-d*t1)) = difference
+
+    Args:
+        t1: Time in days for first point
+        t2: Time in days for second point (t2 > t1)
+        difference: The difference in weights between the two points
+
+    Returns:
+        float: The estimated decay rate d
     """
-    """
-    I want the effective annual rate of return for each stock in shadow_transactions.  
-    Each stock has a transaction list with a given date & amount sold or bought.  
-    A stock at the  i^{th} transaction at time t_i is bought for c_i.  
-    Then, if now is t=0 and its value is now v_i, then it has a return, r_i, such that v_i = c_i*(1+r_i)^{t_i}.  
-    Given that there a list of transaction for each stock, the total value is Sum_{i=1}^{n}v_i.  
-    Replacing each r_{i} with one effective rate r_{eff} and 
-    also allow for selling a stock, also noted at c_i, we now have the recusrive relation 
-    v_{i+1}=(v_i+c_{i+1})*(1+r_{eff})^(t_i-t_{i+1}).  
-    Write the code the does a nonlinear squares estimate of finding 
-    r_{eff} based on this relation and using the shadow transactions
-    """
-    if current_date is None:
-        current_date = date.today()
+    def equation(d):
+        """
+        Equation to solve: exp(-d*t1) - exp(-d*t2) = difference
+        This is derived from: (1-exp(-d*t2)) - (1-exp(-d*t1)) = difference
+        """
+        return np.exp(-d * t1) - np.exp(-d * t2) - difference
 
-    t['effective_annual_rate_of_return'] = np.zeros((t['num_stocks'],))
+    # Initial guess for decay rate (small positive value)
+    initial_guess = 0.01
 
-    for i in range(t['num_stocks']):
-        amounts = np.array(t['transaction_amounts'][i])
-        dates = t['transaction_dates'][i]
-        
-        # durations (t_i) in years from transaction date to current_date
-        durations = np.array([(current_date - d).days / 365.25 for d in dates])
-        current_val = t.get('current_total_value', {}).get(i, 0.0)
+    # Solve for d
+    d_solution = fsolve(equation, initial_guess)[0]
 
-        def residual(r_arr):
-            r = r_arr[0]
-            # Vectorized calculation of predicted future value
-            # np.maximum ensures the base is positive for fractional exponents
-            predicted = np.sum(amounts * np.power(np.maximum(1.0 + r, 1e-9), durations))
-            return [predicted - current_val]
-
-        # x0=0.1 (10% return) is the initial guess; bounds prevent math errors
-        res = least_squares(residual, x0=[0.1], bounds=(-0.999, 100.0))
-        t['effective_annual_rate_of_return'][i] = res.x[0]
-    return t
-
-def set_total_effective_annual_rate_of_return(t, current_date=None):
-    """
-    Calculates the effective annual rate of return (r_eff) for the entire portfolio.
-    Aggregates all transactions across all stocks and solves for a single global r_eff.
-    """
-    if current_date is None:
-        current_date = date.today()
-
-    all_amounts = []
-    all_durations = []
-    total_current_value = 0.0
-
-    for i in range(t['num_stocks']):
-        amounts = t['transaction_amounts'][i]
-        dates = t['transaction_dates'][i]
-        
-        # durations (t_i) in years from transaction date to current_date
-        durations = [(current_date - d).days / 365.25 for d in dates]
-        
-        all_amounts.extend(amounts)
-        all_durations.extend(durations)
-        total_current_value += t.get('current_total_value', {}).get(i, 0.0)
-
-    all_amounts = np.array(all_amounts)
-    all_durations = np.array(all_durations)
-
-    def residual(r_arr):
-        r = r_arr[0]
-        predicted = np.sum(all_amounts * np.power(np.maximum(1.0 + r, 1e-9), all_durations))
-        return [predicted - total_current_value]
-
-    res = least_squares(residual, x0=[0.1], bounds=(-0.999, 100.0))
-    t['total_effective_annual_rate_of_return'] = res.x[0]
-    return t
-
-def set_current_total_value_and_cost_basis_and_sales(t):  #(t)ransactions
-    t['current_total_value'] = dict()
-    t['cost_basis'] = dict()
-    t['sales'] = dict()
-    for i in range(t['num_stocks']):
-        cost_basis_indices = np.where(np.array(t['transaction_amounts'][i]) > 0)
-        sales_indices = np.where(np.array(t['transaction_amounts'][i]) < 0)
-        t['cost_basis'][i] = np.sum(np.take(t['transaction_amounts'][i], cost_basis_indices).tolist())
-        t['sales'][i] = np.sum(np.take(t['transaction_amounts'][i], sales_indices).tolist())
-        cost_basis_quantity = np.sum(np.take(t['transaction_quantities'][i], cost_basis_indices))
-        sale_quantity = np.sum(np.take(t['transaction_quantities'][i], sales_indices))
-        current_quantity = cost_basis_quantity - sale_quantity
-        t['current_total_value'][i] = np.sum(t['CurrentPrice($)'][i]*current_quantity)
-    return t
-
-def set_good_standing(t, stocks_to_exclude = []):
-    t['good_standing'] = np.ones((t['num_stocks'],))
-    for i in range(t['num_stocks']):
-        if \
-            "Earnings probation" in t['Notes'][i] or \
-            "Exceeds size limit" in t['Notes'][i] or \
-            t['ticker'][i] in stocks_to_exclude:
-            t['good_standing'][i] = 0
-    return t
-
-def set_date_of_first_purchase(t):
-    t['date_of_first_purchase'] = {}
-    for i in range(t['num_stocks']):
-        # if t['transaction_dates'][i] != []:
-        if t['good_standing'][i]:
-            t['date_of_first_purchase'][i] = t['transaction_dates'][i][0]
-        # else:
-        #     t['date_of_first_purchase'][i] = []
-    return t
-
-def get_tau(weight, duration_in_days):
-    # Solves for:
-    #  weight = 1 - exp(-duration_in_days/tau)
-    tau = -duration_in_days / np.log(1-weight)
-    return tau
-
-def read_tickers_from_text(filename):
-    tickers = []
-    with open(filename, 'r') as file:
-        for line in file:
-            # .strip() removes whitespace and newline characters
-            symbol = line.strip()
-            if symbol:  # This skips any empty lines
-                tickers.append(symbol)
-    return tickers
-
-def filter_transaction_history(transaction_history, shadow, deleted_shadow_stocks):
-    # Extract valid tickers from shadow, removing any '*' character
-    shadow_tickers = {t.replace("*", "") for t in shadow['Ticker']}
-    # Combine with deleted tickers
-    valid_tickers = shadow_tickers.union(set(deleted_shadow_stocks))
-    
-    # Filter the transaction history where either 'Symbol' or 'Activity Type' matches
-    is_valid = transaction_history['Symbol'].isin(valid_tickers) | \
-               transaction_history['Activity Type'].isin(valid_tickers)
-    
-    new_transaction_history = transaction_history[is_valid].copy()
-    return new_transaction_history
+    return d_solution

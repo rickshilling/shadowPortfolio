@@ -3,7 +3,7 @@ import numpy as np
 from scipy.optimize import fsolve
 
 
-def calculate_cost_basis_per_time(transactions, decay_rate=0.01):
+def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=None):
     """
     Calculate cost basis per unit time for each stock.
 
@@ -16,6 +16,7 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01):
             - Activity/Trade Date: Date of transaction
         decay_rate: Rate for inverted exponential decay (default 0.01). Higher values give
                    more weight to older transactions.
+        reference_date: Date to use as reference for decay calculations (default: current date)
 
     Returns:
         DataFrame with columns:
@@ -26,13 +27,15 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01):
             - Total Shares: Total shares bought
             - Days Held: Number of days from first to last transaction
             - Cost per Day: Net cost / days held
-            - Cost per Share-Day: Net cost / (shares * days)
             - Weighted Cost per Day: Net cost with exponential decay weighting / days held
     """
     results = []
 
-    # Get present day (current date)
-    present_day = pd.Timestamp.now().normalize()
+    # Use reference_date if provided, otherwise use current date
+    if reference_date is None:
+        reference_date = pd.Timestamp.now().normalize()
+    else:
+        reference_date = pd.Timestamp(reference_date).normalize()
 
     for ticker in transactions['Symbol'].unique():
         stock_txns = transactions[transactions['Symbol'] == ticker].sort_values('Activity/Trade Date')
@@ -54,8 +57,8 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01):
             if pd.isna(quantity) or pd.isna(amount):
                 continue
 
-            # Calculate days from present (time = 0 at present day)
-            days_ago = (present_day - date).days
+            # Calculate days from reference_date
+            days_ago = (reference_date - date).days
 
             # Calculate inverted exponential decay weight (older transactions get higher weight)
             weight = 1 - np.exp(-decay_rate * days_ago)
@@ -81,7 +84,6 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01):
 
             if total_days > 0 and total_shares > 0:
                 cost_per_day = net_cost / total_days
-                cost_per_share_day = net_cost / (total_shares * total_days)
                 weighted_cost_per_day = weighted_net_cost / total_days
 
                 results.append({
@@ -92,14 +94,13 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01):
                     'Total Shares': total_shares,
                     'Days Held': total_days,
                     'Cost per Day': cost_per_day,
-                    'Cost per Share-Day': cost_per_share_day,
                     'Weighted Cost per Day': weighted_cost_per_day
                 })
 
     return pd.DataFrame(results)
 
 
-def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, transactions_df, decay_rate=0.01, future_date=None):
+def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, transactions_df, decay_rate=0.01, reference_date=None):
     """
     Allocate weekly investment by buying shares of stocks with lowest weighted cost per day.
     Updates weighted cost after each purchase to reflect new shares by recalculating from original transactions.
@@ -122,7 +123,7 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
             - Amount $: Transaction amount
             - Activity/Trade Date: Date of transaction
         decay_rate: Decay rate for weighting (default 0.01)
-        future_date: Date to use as reference for decay calculations (default: current date)
+        reference_date: Date to use as reference for decay calculations (default: current date)
 
     Returns:
         tuple: (allocation_df, updated_cost_basis_df)
@@ -131,11 +132,11 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
                 - Shares to Buy: Number of shares to buy
             - updated_cost_basis_df: DataFrame with updated weighted costs after all purchases
     """
-    # Use future_date if provided, otherwise use current date
-    if future_date is None:
-        future_date = pd.Timestamp.now().normalize()
+    # Use reference_date if provided, otherwise use current date
+    if reference_date is None:
+        reference_date = pd.Timestamp.now().normalize()
     else:
-        future_date = pd.Timestamp(future_date).normalize()
+        reference_date = pd.Timestamp(reference_date).normalize()
 
     # Create a mapping of ticker to current price
     price_map = dict(zip(price_df['Ticker'], price_df['CurrentPrice($)']))
@@ -154,27 +155,21 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
     remaining_amount = weekly_new_amount
 
     while remaining_amount > 0:
-        # Find the stock with the lowest weighted cost per day
-        min_weighted_cost_row = cost_basis_df.loc[cost_basis_df['Weighted Cost per Day'].idxmin()]
+        # Filter to stocks we can afford
+        affordable_df = cost_basis_df.copy()
+        affordable_df['Current Price'] = affordable_df['Ticker'].map(price_map)
+        affordable_df = affordable_df[
+            (affordable_df['Current Price'].notna()) &
+            (affordable_df['Current Price'] <= remaining_amount)
+        ]
+
+        if len(affordable_df) == 0:
+            break
+
+        # Find the stock with the lowest weighted cost per day among affordable stocks
+        min_weighted_cost_row = affordable_df.loc[affordable_df['Weighted Cost per Day'].idxmin()]
         ticker = min_weighted_cost_row['Ticker']
-
-        # Get current price of this stock
-        current_price = price_map.get(ticker)
-
-        if current_price is None or pd.isna(current_price):
-            # Skip if price not available
-            cost_basis_df = cost_basis_df[cost_basis_df['Ticker'] != ticker]
-            if len(cost_basis_df) == 0:
-                break
-            continue
-
-        # Check if we can afford this stock
-        if current_price > remaining_amount:
-            # Can't afford this stock, skip it
-            cost_basis_df = cost_basis_df[cost_basis_df['Ticker'] != ticker]
-            if len(cost_basis_df) == 0:
-                break
-            continue
+        current_price = min_weighted_cost_row['Current Price']
 
         # Add 1 share to the allocation
         shares_to_buy[ticker] += 1
@@ -182,9 +177,9 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
 
         # Add the new purchase to the transactions for this ticker
         new_txn = pd.DataFrame([{
-            'Activity/Trade Date': future_date,
-            'Transaction Date': future_date,
-            'Settlement Date': future_date,
+            'Activity/Trade Date': reference_date,
+            'Transaction Date': reference_date,
+            'Settlement Date': reference_date,
             'Activity Type': 'Bought',
             'Description': f'Weekly investment buy',
             'Symbol': ticker,
@@ -216,8 +211,8 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
             if pd.isna(quantity) or pd.isna(amount):
                 continue
 
-            # Calculate days from future_date
-            days_ago = (future_date - date).days
+            # Calculate days from reference_date
+            days_ago = (reference_date - date).days
 
             # Calculate inverted exponential decay weight
             weight = 1 - np.exp(-decay_rate * days_ago)
@@ -258,13 +253,14 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
         if shares > 0
     ])
 
+    # Return the updated cost_basis_df (which contains all stocks with their updated values)
     return result_df, cost_basis_df
 
 
 def get_decay_rate(t1, t2, difference):
     """
     Estimate the decay rate d based on the constraint:
-    (1 - exp(-d*t2)) - (1 - exp(-d*t1)) = difference
+    (exp(-d*t1) - exp(-d*t2))/(1-exp(-d*t1)) = difference
 
     Args:
         t1: Time in days for first point
@@ -276,10 +272,11 @@ def get_decay_rate(t1, t2, difference):
     """
     def equation(d):
         """
-        Equation to solve: exp(-d*t1) - exp(-d*t2) = difference
-        This is derived from: (1-exp(-d*t2)) - (1-exp(-d*t1)) = difference
+        Equation to solve: (exp(-d*t1) - exp(-d*t2))/(1-exp(-d*t1)) = difference
         """
-        return np.exp(-d * t1) - np.exp(-d * t2) - difference
+        exp_t1 = np.exp(-d * t1)
+        exp_t2 = np.exp(-d * t2)
+        return (exp_t1 - exp_t2) / (1 - exp_t1) - difference
 
     # Initial guess for decay rate (small positive value)
     initial_guess = 0.01

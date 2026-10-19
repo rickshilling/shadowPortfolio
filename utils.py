@@ -60,8 +60,12 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=
             # Calculate days from reference_date
             days_ago = (reference_date - date).days
 
-            # Calculate inverted exponential decay weight (older transactions get higher weight)
-            weight = 1 - np.exp(-decay_rate * days_ago)
+            # If decay is disabled, all weights should be neutral and equal to 1
+            if np.isclose(decay_rate, 0):
+                weight = 1.0
+            else:
+                # Calculate inverted exponential decay weight (older transactions get higher weight)
+                weight = 1 - np.exp(-decay_rate * days_ago)
 
             if 'BOUGHT' in activity or 'BUY' in activity or 'OPEN' in activity:
                 # Buying shares - add to cost basis with weighting
@@ -214,8 +218,12 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
             # Calculate days from reference_date
             days_ago = (reference_date - date).days
 
-            # Calculate inverted exponential decay weight
-            weight = 1 - np.exp(-decay_rate * days_ago)
+            # If decay is disabled, all weights should be neutral and equal to 1
+            if np.isclose(decay_rate, 0):
+                weight = 1.0
+            else:
+                # Calculate inverted exponential decay weight
+                weight = 1 - np.exp(-decay_rate * days_ago)
 
             if 'BOUGHT' in activity or 'BUY' in activity or 'OPEN' in activity:
                 total_buy_cost += abs(amount)

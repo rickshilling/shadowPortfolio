@@ -1,6 +1,49 @@
 import pandas as pd
 import numpy as np
-from scipy.optimize import fsolve
+from scipy.optimize import fsolve, least_squares
+
+
+def _is_buy_transaction(activity, amount):
+    """Return True when a transaction is a purchase.
+
+    If the activity label is missing or ambiguous, a negative cash amount is treated
+    as a buy. Positive amounts are treated as sells unless the label explicitly says
+    otherwise.
+    """
+    activity_text = str(activity).upper() if pd.notna(activity) else ""
+
+    if 'BOUGHT' in activity_text or 'BUY' in activity_text or 'OPEN' in activity_text:
+        return True
+    if 'SELL' in activity_text or 'SOLD' in activity_text or 'CLOSE' in activity_text:
+        return False
+
+    if pd.isna(amount):
+        return False
+
+    amount_value = pd.to_numeric(amount, errors='coerce')
+    if pd.isna(amount_value):
+        return False
+
+    return amount_value < 0
+
+
+def _is_sell_transaction(activity, amount):
+    """Return True when a transaction is a sale."""
+    activity_text = str(activity).upper() if pd.notna(activity) else ""
+
+    if 'SELL' in activity_text or 'SOLD' in activity_text or 'CLOSE' in activity_text:
+        return True
+    if 'BOUGHT' in activity_text or 'BUY' in activity_text or 'OPEN' in activity_text:
+        return False
+
+    if pd.isna(amount):
+        return False
+
+    amount_value = pd.to_numeric(amount, errors='coerce')
+    if pd.isna(amount_value):
+        return False
+
+    return amount_value > 0
 
 
 def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=None):
@@ -46,36 +89,34 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=
         total_days = 0
         weighted_net_cost = 0
 
+        if len(stock_txns) > 0:
+            first_transaction_date = stock_txns['Activity/Trade Date'].min()
+            days_ago_from_first_transaction = (reference_date - first_transaction_date).days
+
+            if np.isclose(decay_rate, 0):
+                stock_weight = 1.0
+            else:
+                stock_weight = 1 - np.exp(-decay_rate * days_ago_from_first_transaction)
+
         for _, txn in stock_txns.iterrows():
-            activity = str(txn['Activity Type']).upper()
+            activity = txn.get('Activity Type')
             quantity = txn['Quantity #']
             price = txn['Price $']
             amount = txn['Amount $']
-            date = txn['Activity/Trade Date']
 
             # Handle NaN values
             if pd.isna(quantity) or pd.isna(amount):
                 continue
 
-            # Calculate days from reference_date
-            days_ago = (reference_date - date).days
-
-            # If decay is disabled, all weights should be neutral and equal to 1
-            if np.isclose(decay_rate, 0):
-                weight = 1.0
-            else:
-                # Calculate inverted exponential decay weight (older transactions get higher weight)
-                weight = 1 - np.exp(-decay_rate * days_ago)
-
-            if 'BOUGHT' in activity or 'BUY' in activity or 'OPEN' in activity:
+            if _is_buy_transaction(activity, amount):
                 # Buying shares - add to cost basis with weighting
                 total_buy_cost += abs(amount)
-                weighted_net_cost += abs(amount) * weight
+                weighted_net_cost += abs(amount) * stock_weight
                 total_shares += quantity
-            elif 'SELL' in activity or 'CLOSE' in activity:
+            elif _is_sell_transaction(activity, amount):
                 # Selling shares - track proceeds with weighting
                 total_sell_proceeds += abs(amount)
-                weighted_net_cost -= abs(amount) * weight
+                weighted_net_cost -= abs(amount) * stock_weight
 
         # Calculate net cost (buys - sells)
         net_cost = total_buy_cost - total_sell_proceeds
@@ -104,7 +145,7 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=
     return pd.DataFrame(results)
 
 
-def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, transactions_df, decay_rate=0.01, reference_date=None):
+def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, transactions_df, decay_rate=0.01, reference_date=None, max_stock_buy=250.0):
     """
     Allocate weekly investment by buying shares of stocks with lowest weighted cost per day.
     Updates weighted cost after each purchase to reflect new shares by recalculating from original transactions.
@@ -128,6 +169,9 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
             - Activity/Trade Date: Date of transaction
         decay_rate: Decay rate for weighting (default 0.01)
         reference_date: Date to use as reference for decay calculations (default: current date)
+        max_stock_buy: Maximum dollar amount to allocate to any single stock in this
+            weekly cycle. Once a stock reaches this cap, it is skipped for the rest of
+            the cycle. Defaults to 250. Use None to disable the cap.
 
     Returns:
         tuple: (allocation_df, updated_cost_basis_df)
@@ -147,6 +191,7 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
 
     # Create a dictionary to track shares to buy for each stock
     shares_to_buy = {ticker: 0 for ticker in cost_basis_df['Ticker']}
+    allocated_per_stock = {ticker: 0.0 for ticker in cost_basis_df['Ticker']}
 
     # Make a copy of cost_basis_df that we can modify
     cost_basis_df = cost_basis_df.copy()
@@ -159,13 +204,21 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
     remaining_amount = weekly_new_amount
 
     while remaining_amount > 0:
-        # Filter to stocks we can afford
+        # Filter to stocks we can afford and that are below the per-stock cap
         affordable_df = cost_basis_df.copy()
         affordable_df['Current Price'] = affordable_df['Ticker'].map(price_map)
         affordable_df = affordable_df[
             (affordable_df['Current Price'].notna()) &
             (affordable_df['Current Price'] <= remaining_amount)
         ]
+
+        if max_stock_buy is not None:
+            affordable_df = affordable_df[
+                affordable_df.apply(
+                    lambda row: allocated_per_stock.get(row['Ticker'], 0.0) + row['Current Price'] <= max_stock_buy,
+                    axis=1,
+                )
+            ]
 
         if len(affordable_df) == 0:
             break
@@ -175,8 +228,9 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
         ticker = min_weighted_cost_row['Ticker']
         current_price = min_weighted_cost_row['Current Price']
 
-        # Add 1 share to the allocation
+        # Add 1 share to the allocation, but stop once the per-stock cap is reached
         shares_to_buy[ticker] += 1
+        allocated_per_stock[ticker] += current_price
         remaining_amount -= current_price
 
         # Add the new purchase to the transactions for this ticker
@@ -205,33 +259,31 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
         total_shares = 0
         weighted_net_cost = 0
 
+        if len(stock_txns) > 0:
+            first_transaction_date = stock_txns['Activity/Trade Date'].min()
+            days_ago_from_first_transaction = (reference_date - first_transaction_date).days
+
+            if np.isclose(decay_rate, 0):
+                stock_weight = 1.0
+            else:
+                stock_weight = 1 - np.exp(-decay_rate * days_ago_from_first_transaction)
+
         for _, txn in stock_txns.iterrows():
-            activity = str(txn['Activity Type']).upper()
+            activity = txn.get('Activity Type')
             quantity = txn['Quantity #']
             amount = txn['Amount $']
-            date = txn['Activity/Trade Date']
 
             # Handle NaN values
             if pd.isna(quantity) or pd.isna(amount):
                 continue
 
-            # Calculate days from reference_date
-            days_ago = (reference_date - date).days
-
-            # If decay is disabled, all weights should be neutral and equal to 1
-            if np.isclose(decay_rate, 0):
-                weight = 1.0
-            else:
-                # Calculate inverted exponential decay weight
-                weight = 1 - np.exp(-decay_rate * days_ago)
-
-            if 'BOUGHT' in activity or 'BUY' in activity or 'OPEN' in activity:
+            if _is_buy_transaction(activity, amount):
                 total_buy_cost += abs(amount)
-                weighted_net_cost += abs(amount) * weight
+                weighted_net_cost += abs(amount) * stock_weight
                 total_shares += quantity
-            elif 'SELL' in activity or 'CLOSE' in activity:
+            elif _is_sell_transaction(activity, amount):
                 total_sell_proceeds += abs(amount)
-                weighted_net_cost -= abs(amount) * weight
+                weighted_net_cost -= abs(amount) * stock_weight
 
         # Calculate net cost and weighted cost per day
         net_cost = total_buy_cost - total_sell_proceeds
@@ -263,6 +315,40 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
 
     # Return the updated cost_basis_df (which contains all stocks with their updated values)
     return result_df, cost_basis_df
+
+
+def compute_effective_annual_rate(amounts, dates, current_value, current_date):
+    """
+    Solve for the annual effective rate of return given a series of signed cash flows.
+
+    This matches the main branch formula:
+    sum(amounts * (1 + r)^t) = current_value
+    where time is measured in years from each transaction date to current_date.
+    """
+    amounts = -np.asarray(amounts, dtype=float)
+    dates = pd.to_datetime(pd.Series(dates), format='mixed')
+    durations = np.array([(pd.Timestamp(current_date) - d).days / 365.25 for d in dates])
+
+    def residual(r_arr):
+        r = r_arr[0]
+        predicted = np.sum(amounts * np.power(np.maximum(1.0 + r, 1e-9), durations))
+        return [predicted - current_value]
+
+    res = least_squares(residual, x0=[0.1], bounds=(-0.999, 100.0))
+    return float(res.x[0])
+
+
+def compute_portfolio_effective_annual_return(transactions_df, current_value, current_date=None):
+    """Compute the effective annual return for the portfolio using the main-branch equation."""
+    if current_date is None:
+        current_date = pd.Timestamp.now().normalize()
+
+    return compute_effective_annual_rate(
+        transactions_df['Amount $'].astype(float).to_numpy(),
+        transactions_df['Activity/Trade Date'].tolist(),
+        current_value,
+        current_date,
+    )
 
 
 def get_decay_rate(t1, t2, difference):

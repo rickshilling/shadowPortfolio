@@ -84,6 +84,78 @@ def test_missing_activity_uses_negative_amount_as_buy():
     assert stock_a['Net Cost'] == 40.0
 
 
+def test_dividend_activity_is_not_counted_as_sell_proceeds():
+    transactions = pd.DataFrame(
+        {
+            'Symbol': ['A', 'A'],
+            'Activity Type': ['Bought', 'Dividend'],
+            'Quantity #': [10, 0],
+            'Amount $': [-100.0, 10.0],
+            'Price $': [10.0, 0.0],
+            'Activity/Trade Date': [
+                pd.Timestamp('2024-01-01'),
+                pd.Timestamp('2024-01-15'),
+            ],
+        }
+    )
+
+    result = calculate_cost_basis_per_time(transactions, decay_rate=0, reference_date=pd.Timestamp('2024-01-20'))
+    stock_a = result[result['Ticker'] == 'A'].iloc[0]
+
+    assert stock_a['Total Buy Cost'] == 100.0
+    assert stock_a['Total Sell Proceeds'] == 0.0
+    assert stock_a['Total Dividend Payout'] == 10.0
+    assert stock_a['Net Cost'] == 100.0
+
+
+def test_negative_dividend_activity_is_treated_as_buy_reinvestment():
+    transactions = pd.DataFrame(
+        {
+            'Symbol': ['A', 'A'],
+            'Activity Type': ['Bought', 'Dividend'],
+            'Quantity #': [10, 0],
+            'Amount $': [-100.0, -10.0],
+            'Price $': [10.0, 0.0],
+            'Activity/Trade Date': [
+                pd.Timestamp('2024-01-01'),
+                pd.Timestamp('2024-01-15'),
+            ],
+        }
+    )
+
+    result = calculate_cost_basis_per_time(transactions, decay_rate=0, reference_date=pd.Timestamp('2024-01-20'))
+    stock_a = result[result['Ticker'] == 'A'].iloc[0]
+
+    assert stock_a['Total Buy Cost'] == 110.0
+    assert stock_a['Total Sell Proceeds'] == 0.0
+    assert stock_a['Total Dividend Payout'] == 0.0
+    assert stock_a['Net Cost'] == 110.0
+
+
+def test_zero_quantity_positive_cash_entry_counts_as_dividend_payout():
+    transactions = pd.DataFrame(
+        {
+            'Symbol': ['A', 'A'],
+            'Activity Type': ['Bought', 0],
+            'Quantity #': [10, 0],
+            'Amount $': [-100.0, 4.73],
+            'Price $': [10.0, 0.0],
+            'Activity/Trade Date': [
+                pd.Timestamp('2024-01-01'),
+                pd.Timestamp('2024-01-15'),
+            ],
+        }
+    )
+
+    result = calculate_cost_basis_per_time(transactions, decay_rate=0, reference_date=pd.Timestamp('2024-01-20'))
+    stock_a = result[result['Ticker'] == 'A'].iloc[0]
+
+    assert stock_a['Total Buy Cost'] == 100.0
+    assert stock_a['Total Sell Proceeds'] == 0.0
+    assert stock_a['Total Dividend Payout'] == 4.73
+    assert stock_a['Net Cost'] == 100.0
+
+
 def test_allocate_weekly_investment_respects_stock_buy_cap():
     cost_basis_df = pd.DataFrame(
         {

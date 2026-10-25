@@ -3,18 +3,62 @@ import numpy as np
 from scipy.optimize import fsolve, least_squares
 
 
-def _is_buy_transaction(activity, amount):
+def _is_dividend_transaction(activity):
+    """Return True when a transaction is a dividend payment."""
+    if pd.isna(activity):
+        return False
+    activity_text = str(activity).upper()
+    return 'DIVIDEND' in activity_text
+
+
+def _is_zero_quantity_dividend_entry(activity, quantity, amount):
+    """Return True for zero-share cash entries that are actually dividend payouts.
+
+    Some exports store dividend payouts with a blank/0 activity label and zero shares,
+    so they should be counted as dividend cash instead of generic sales.
+    """
+    if pd.isna(amount):
+        return False
+
+    amount_value = pd.to_numeric(amount, errors='coerce')
+    if pd.isna(amount_value) or amount_value <= 0:
+        return False
+
+    if pd.isna(quantity):
+        return False
+
+    quantity_value = pd.to_numeric(quantity, errors='coerce')
+    if pd.isna(quantity_value):
+        return False
+
+    if quantity_value != 0:
+        return False
+
+    activity_text = str(activity).upper() if pd.notna(activity) else ""
+    return activity_text in {"", "0"}
+
+
+def _is_buy_transaction(activity, amount, quantity=None):
     """Return True when a transaction is a purchase.
 
-    If the activity label is missing or ambiguous, a negative cash amount is treated
-    as a buy. Positive amounts are treated as sells unless the label explicitly says
-    otherwise.
+    Dividend reinvestments with a negative amount are still buys, so they must remain
+    in the buy total. Only positive dividend payouts are excluded from buys.
     """
     activity_text = str(activity).upper() if pd.notna(activity) else ""
 
     if 'BOUGHT' in activity_text or 'BUY' in activity_text or 'OPEN' in activity_text:
         return True
     if 'SELL' in activity_text or 'SOLD' in activity_text or 'CLOSE' in activity_text:
+        return False
+    if 'DIVIDEND' in activity_text:
+        if pd.isna(amount):
+            return False
+        amount_value = pd.to_numeric(amount, errors='coerce')
+        if pd.isna(amount_value):
+            return False
+        return amount_value < 0
+
+    if _is_zero_quantity_dividend_entry(activity, quantity, amount):
         return False
 
     if pd.isna(amount):
@@ -27,10 +71,18 @@ def _is_buy_transaction(activity, amount):
     return amount_value < 0
 
 
-def _is_sell_transaction(activity, amount):
-    """Return True when a transaction is a sale."""
+def _is_sell_transaction(activity, amount, quantity=None):
+    """Return True when a transaction is a sale.
+
+    Positive dividend payouts are excluded from sells; negative dividend reinvestments
+    are treated as buys instead.
+    """
     activity_text = str(activity).upper() if pd.notna(activity) else ""
 
+    if 'DIVIDEND' in activity_text:
+        return False
+    if _is_zero_quantity_dividend_entry(activity, quantity, amount):
+        return False
     if 'SELL' in activity_text or 'SOLD' in activity_text or 'CLOSE' in activity_text:
         return True
     if 'BOUGHT' in activity_text or 'BUY' in activity_text or 'OPEN' in activity_text:
@@ -66,6 +118,7 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=
             - Ticker: Stock symbol
             - Total Buy Cost: Total cost of all buy transactions
             - Total Sell Proceeds: Total proceeds from all sell transactions
+            - Total Dividend Payout: Total dividend cash received for the stock
             - Net Cost: Total buy cost - total sell proceeds
             - Total Shares: Total shares bought
             - Days Held: Number of days from first to last transaction
@@ -85,6 +138,7 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=
 
         total_buy_cost = 0
         total_sell_proceeds = 0
+        total_dividend_payout = 0
         total_shares = 0
         total_days = 0
         weighted_net_cost = 0
@@ -105,18 +159,33 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=
             amount = txn['Amount $']
 
             # Handle NaN values
-            if pd.isna(quantity) or pd.isna(amount):
+            if pd.isna(amount):
                 continue
 
-            if _is_buy_transaction(activity, amount):
+            amount_value = pd.to_numeric(amount, errors='coerce')
+            if pd.isna(amount_value):
+                continue
+
+            dividend_like = _is_dividend_transaction(activity) or _is_zero_quantity_dividend_entry(activity, quantity, amount)
+            if dividend_like and amount_value > 0:
+                total_dividend_payout += abs(amount_value)
+
+            if pd.isna(quantity):
+                continue
+
+            quantity_value = pd.to_numeric(quantity, errors='coerce')
+            if pd.isna(quantity_value):
+                continue
+
+            if _is_buy_transaction(activity, amount, quantity):
                 # Buying shares - add to cost basis with weighting
-                total_buy_cost += abs(amount)
-                weighted_net_cost += abs(amount) * stock_weight
-                total_shares += quantity
-            elif _is_sell_transaction(activity, amount):
+                total_buy_cost += abs(amount_value)
+                weighted_net_cost += abs(amount_value) * stock_weight
+                total_shares += quantity_value
+            elif _is_sell_transaction(activity, amount, quantity):
                 # Selling shares - track proceeds with weighting
-                total_sell_proceeds += abs(amount)
-                weighted_net_cost -= abs(amount) * stock_weight
+                total_sell_proceeds += abs(amount_value)
+                weighted_net_cost -= abs(amount_value) * stock_weight
 
         # Calculate net cost (buys - sells)
         net_cost = total_buy_cost - total_sell_proceeds
@@ -135,6 +204,7 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=
                     'Ticker': ticker,
                     'Total Buy Cost': total_buy_cost,
                     'Total Sell Proceeds': total_sell_proceeds,
+                    'Total Dividend Payout': total_dividend_payout,
                     'Net Cost': net_cost,
                     'Total Shares': total_shares,
                     'Days Held': total_days,
@@ -256,6 +326,7 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
 
         total_buy_cost = 0
         total_sell_proceeds = 0
+        total_dividend_payout = 0
         total_shares = 0
         weighted_net_cost = 0
 
@@ -274,16 +345,31 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
             amount = txn['Amount $']
 
             # Handle NaN values
-            if pd.isna(quantity) or pd.isna(amount):
+            if pd.isna(amount):
                 continue
 
-            if _is_buy_transaction(activity, amount):
-                total_buy_cost += abs(amount)
-                weighted_net_cost += abs(amount) * stock_weight
-                total_shares += quantity
-            elif _is_sell_transaction(activity, amount):
-                total_sell_proceeds += abs(amount)
-                weighted_net_cost -= abs(amount) * stock_weight
+            amount_value = pd.to_numeric(amount, errors='coerce')
+            if pd.isna(amount_value):
+                continue
+
+            dividend_like = _is_dividend_transaction(activity) or _is_zero_quantity_dividend_entry(activity, quantity, amount)
+            if dividend_like and amount_value > 0:
+                total_dividend_payout += abs(amount_value)
+
+            if pd.isna(quantity):
+                continue
+
+            quantity_value = pd.to_numeric(quantity, errors='coerce')
+            if pd.isna(quantity_value):
+                continue
+
+            if _is_buy_transaction(activity, amount, quantity):
+                total_buy_cost += abs(amount_value)
+                weighted_net_cost += abs(amount_value) * stock_weight
+                total_shares += quantity_value
+            elif _is_sell_transaction(activity, amount, quantity):
+                total_sell_proceeds += abs(amount_value)
+                weighted_net_cost -= abs(amount_value) * stock_weight
 
         # Calculate net cost and weighted cost per day
         net_cost = total_buy_cost - total_sell_proceeds
@@ -302,6 +388,7 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
 
         # Update the DataFrame
         idx = cost_basis_df[cost_basis_df['Ticker'] == ticker].index[0]
+        cost_basis_df.at[idx, 'Total Dividend Payout'] = total_dividend_payout
         cost_basis_df.at[idx, 'Net Cost'] = net_cost
         cost_basis_df.at[idx, 'Total Shares'] = total_shares
         cost_basis_df.at[idx, 'Weighted Cost per Day'] = weighted_cost_per_day

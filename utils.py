@@ -41,26 +41,9 @@ def _is_zero_quantity_dividend_entry(activity, quantity, amount):
 def _is_buy_transaction(activity, amount, quantity=None):
     """Return True when a transaction is a purchase.
 
-    Dividend reinvestments with a negative amount are still buys, so they must remain
-    in the buy total. Only positive dividend payouts are excluded from buys.
+    A transaction is a buy if and only if the cash amount is negative.
+    Positive cash entries are handled separately as dividends or sales based on quantity.
     """
-    activity_text = str(activity).upper() if pd.notna(activity) else ""
-
-    if 'BOUGHT' in activity_text or 'BUY' in activity_text or 'OPEN' in activity_text:
-        return True
-    if 'SELL' in activity_text or 'SOLD' in activity_text or 'CLOSE' in activity_text:
-        return False
-    if 'DIVIDEND' in activity_text:
-        if pd.isna(amount):
-            return False
-        amount_value = pd.to_numeric(amount, errors='coerce')
-        if pd.isna(amount_value):
-            return False
-        return amount_value < 0
-
-    if _is_zero_quantity_dividend_entry(activity, quantity, amount):
-        return False
-
     if pd.isna(amount):
         return False
 
@@ -74,20 +57,9 @@ def _is_buy_transaction(activity, amount, quantity=None):
 def _is_sell_transaction(activity, amount, quantity=None):
     """Return True when a transaction is a sale.
 
-    Positive dividend payouts are excluded from sells; negative dividend reinvestments
-    are treated as buys instead.
+    For positive cash amounts, inspect the quantity: zero quantity is a dividend,
+    negative quantity is a sale, and any other case is not treated as a sale.
     """
-    activity_text = str(activity).upper() if pd.notna(activity) else ""
-
-    if 'DIVIDEND' in activity_text:
-        return False
-    if _is_zero_quantity_dividend_entry(activity, quantity, amount):
-        return False
-    if 'SELL' in activity_text or 'SOLD' in activity_text or 'CLOSE' in activity_text:
-        return True
-    if 'BOUGHT' in activity_text or 'BUY' in activity_text or 'OPEN' in activity_text:
-        return False
-
     if pd.isna(amount):
         return False
 
@@ -95,7 +67,17 @@ def _is_sell_transaction(activity, amount, quantity=None):
     if pd.isna(amount_value):
         return False
 
-    return amount_value > 0
+    if amount_value <= 0:
+        return False
+
+    if pd.isna(quantity):
+        return True
+
+    quantity_value = pd.to_numeric(quantity, errors='coerce')
+    if pd.isna(quantity_value):
+        return True
+
+    return quantity_value < 0
 
 
 def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=None):
@@ -167,6 +149,11 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=
                 continue
 
             dividend_like = _is_dividend_transaction(activity) or _is_zero_quantity_dividend_entry(activity, quantity, amount)
+            if pd.notna(quantity):
+                quantity_value = pd.to_numeric(quantity, errors='coerce')
+                if pd.notna(quantity_value) and amount_value > 0 and quantity_value == 0:
+                    dividend_like = True
+
             if dividend_like and amount_value > 0:
                 total_dividend_payout += abs(amount_value)
 

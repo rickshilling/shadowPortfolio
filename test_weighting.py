@@ -132,6 +132,32 @@ def test_negative_dividend_activity_is_treated_as_buy_reinvestment():
     assert stock_a['Net Cost'] == 110.0
 
 
+def test_sign_of_amount_and_quantity_controls_transaction_type():
+    transactions = pd.DataFrame(
+        {
+            'Symbol': ['A', 'A', 'A', 'A'],
+            'Activity Type': ['Bought', 'Bought', 'Sell', 'Cash Dividend'],
+            'Quantity #': [10, -5, 0, None],
+            'Amount $': [-100.0, 80.0, 12.0, 15.0],
+            'Price $': [10.0, 16.0, 0.0, 0.0],
+            'Activity/Trade Date': [
+                pd.Timestamp('2024-01-01'),
+                pd.Timestamp('2024-01-15'),
+                pd.Timestamp('2024-01-20'),
+                pd.Timestamp('2024-01-22'),
+            ],
+        }
+    )
+
+    result = calculate_cost_basis_per_time(transactions, decay_rate=0, reference_date=pd.Timestamp('2024-01-25'))
+    stock_a = result[result['Ticker'] == 'A'].iloc[0]
+
+    assert stock_a['Total Buy Cost'] == 100.0
+    assert stock_a['Total Sell Proceeds'] == 80.0
+    assert stock_a['Total Dividend Payout'] == 27.0
+    assert stock_a['Net Cost'] == 20.0
+
+
 def test_zero_quantity_positive_cash_entry_counts_as_dividend_payout():
     transactions = pd.DataFrame(
         {

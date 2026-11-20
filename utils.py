@@ -202,7 +202,7 @@ def calculate_cost_basis_per_time(transactions, decay_rate=0.01, reference_date=
     return pd.DataFrame(results)
 
 
-def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, transactions_df, decay_rate=0.01, reference_date=None, max_stock_buy=250.0):
+def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, transactions_df, decay_rate=0.01, reference_date=None, max_stock_buy=250.0, excluded_tickers=None):
     """
     Allocate weekly investment by buying shares of stocks with lowest weighted cost per day.
     Updates weighted cost after each purchase to reflect new shares by recalculating from original transactions.
@@ -229,6 +229,7 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
         max_stock_buy: Maximum dollar amount to allocate to any single stock in this
             weekly cycle. Once a stock reaches this cap, it is skipped for the rest of
             the cycle. Defaults to 250. Use None to disable the cap.
+        excluded_tickers: List of stock tickers to exclude from allocation
 
     Returns:
         tuple: (allocation_df, updated_cost_basis_df)
@@ -246,12 +247,27 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
     # Create a mapping of ticker to current price
     price_map = dict(zip(price_df['Ticker'], price_df['CurrentPrice($)']))
 
+    # Normalize exclusions once so case and surrounding whitespace do not affect matching.
+    excluded_ticker_set = {
+        str(ticker).strip().upper()
+        for ticker in (excluded_tickers or [])
+        if pd.notna(ticker) and str(ticker).strip()
+    }
+
     # Create a dictionary to track shares to buy for each stock
     shares_to_buy = {ticker: 0 for ticker in cost_basis_df['Ticker']}
     allocated_per_stock = {ticker: 0.0 for ticker in cost_basis_df['Ticker']}
 
     # Make a copy of cost_basis_df that we can modify
     cost_basis_df = cost_basis_df.copy()
+
+    # Remove excluded stocks before candidate selection.
+    eligible_cost_basis_df = cost_basis_df.copy()
+    if excluded_tickers is not None:
+        normalized_eligible_tickers = eligible_cost_basis_df['Ticker'].astype(str).str.strip().str.upper()
+        eligible_cost_basis_df = eligible_cost_basis_df.loc[
+            ~normalized_eligible_tickers.isin(excluded_ticker_set)
+        ].copy()
 
     # Store original transactions for each ticker
     ticker_transactions = {}
@@ -262,7 +278,7 @@ def allocate_weekly_investment(cost_basis_df, price_df, weekly_new_amount, trans
 
     while remaining_amount > 0:
         # Filter to stocks we can afford and that are below the per-stock cap
-        affordable_df = cost_basis_df.copy()
+        affordable_df = eligible_cost_basis_df.copy()
         affordable_df['Current Price'] = affordable_df['Ticker'].map(price_map)
         affordable_df = affordable_df[
             (affordable_df['Current Price'].notna()) &

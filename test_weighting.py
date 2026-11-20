@@ -214,3 +214,38 @@ def test_allocate_weekly_investment_respects_stock_buy_cap():
 
     merged = allocation_df.merge(price_df, on='Ticker', how='left')
     assert (merged['Shares to Buy'] * merged['CurrentPrice($)']).le(250.0).all()
+
+
+def test_allocate_weekly_investment_excludes_configured_tickers():
+    cost_basis_df = pd.DataFrame(
+        {
+            'Ticker': ['A', 'B'],
+            'Weighted Cost per Day': [0.1, 0.2],
+            'Net Cost': [0.0, 0.0],
+            'Total Shares': [0, 0],
+            'Days Held': [0, 0],
+        }
+    )
+    price_df = pd.DataFrame(
+        {
+            'Ticker': ['A', 'B'],
+            'CurrentPrice($)': [100.0, 100.0],
+        }
+    )
+    transactions_df = pd.DataFrame(
+        columns=['Symbol', 'Activity Type', 'Quantity #', 'Amount $', 'Activity/Trade Date']
+    )
+
+    allocation_df, _ = allocate_weekly_investment(
+        cost_basis_df,
+        price_df,
+        weekly_new_amount=500,
+        transactions_df=transactions_df,
+        decay_rate=0,
+        reference_date=pd.Timestamp('2024-01-20'),
+        max_stock_buy=250.0,
+        excluded_tickers=['A'],
+    )
+
+    assert 'A' not in allocation_df['Ticker'].values
+    assert set(allocation_df['Ticker']) == {'B'}
